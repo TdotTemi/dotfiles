@@ -17,7 +17,7 @@ setup() {
   export HOME="$TEST_HOME"
   export DOTFILES_DIR="$TEST_DOTFILES"
   # Resolve the base default unless a test sets an override on purpose.
-  unset DOTFILES_CLAUDE_MODEL DOTFILES_CLAUDE_EFFORT XDG_CONFIG_HOME
+  unset DOTFILES_CLAUDE_MODEL DOTFILES_CLAUDE_EFFORT DOTFILES_CLAUDE_PERMISSIONS XDG_CONFIG_HOME
 
   OVERRIDES_FILE="$TEST_DOTFILES/.overrides"
   touch "$OVERRIDES_FILE"
@@ -280,4 +280,95 @@ _write_chezmoi_data() {
   # Unescaped, [1m] would be a bracket expression that also matches "...-5-5m".
   echo '{"model": "claude-opus-5-5m", "effortLevel": "high", "permissions": {"defaultMode": "bypassPermissions"}, "skipAutoPermissionPrompt": true}' > "$TEST_HOME/.claude/settings.json"
   if PATH="$bin" _claude_model_is_default; then false; fi
+}
+
+# ── claude_permissions: keep ──────────────────────────────────────────
+
+@test "claude pin: --print-permissions defaults to manage" {
+  run _pin --print-permissions
+  [ "$status" -eq 0 ]
+  [ "$output" = "manage" ]
+}
+
+@test "claude pin: claude_permissions keep pins model and effort but leaves permissions alone" {
+  echo '{"permissions":{"allow":["Edit(~/notes/**)"]}}' > "$TEST_HOME/.claude/settings.json"
+  echo '{"mcpServers":{"my-own-server":{}}}' > "$TEST_HOME/.claude.json"
+  DOTFILES_CLAUDE_PERMISSIONS=keep _pin
+  [ "$(_settings_value .model)" = "claude-opus-5-5" ]
+  [ "$(_settings_value .effortLevel)" = "xhigh" ]
+  [ "$(_settings_value '.permissions.defaultMode // "unset"')" = "unset" ]
+  [ "$(_settings_value '.skipAutoPermissionPrompt // "unset"')" = "unset" ]
+  [ "$(_settings_value '.permissions.allow')" = '[
+  "Edit(~/notes/**)"
+]' ]
+}
+
+@test "claude pin: chezmoi data claude_permissions keep is honored" {
+  command -v chezmoi >/dev/null 2>&1 || skip "chezmoi not installed"
+  mkdir -p "$TEST_HOME/.config/chezmoi"
+  printf 'data:\n  claude_permissions: "keep"\n' > "$TEST_HOME/.config/chezmoi/chezmoi.yaml"
+  run _pin --print-permissions
+  [ "$output" = "keep" ]
+}
+
+@test "claude.model_default passes under keep without bypassPermissions" {
+  echo '{"model":"claude-opus-5-5","effortLevel":"xhigh","permissions":{"allow":[]}}' > "$TEST_HOME/.claude/settings.json"
+  export DOTFILES_CLAUDE_PERMISSIONS=keep
+  source "$BATS_TEST_DIRNAME/../modules/claude/doctor.sh"
+  _claude_model_is_default
+  unset DOTFILES_CLAUDE_PERMISSIONS
+  ! _claude_model_is_default
+}
+
+@test "claude wrapper: keep adds no --permission-mode; manage adds bypassPermissions" {
+  cp "$BATS_TEST_DIRNAME/../.chezmoiscripts/run_after_claude-wrapper.sh" "$TEST_DOTFILES/.chezmoiscripts/"
+  printf '#!/bin/bash\necho "$@"\n' > "$TEST_HOME/.local/bin/claude"
+  chmod +x "$TEST_HOME/.local/bin/claude"
+  rm -f "$TEST_HOME/bin/claude"
+  DOTFILES_CLAUDE_PERMISSIONS=keep bash "$TEST_DOTFILES/.chezmoiscripts/run_after_claude-wrapper.sh"
+  run "$TEST_HOME/bin/claude" -p hi
+  [[ "$output" != *"--permission-mode"* ]]
+  run "$TEST_HOME/bin/claude" rc
+  [[ "$output" != *"--permission-mode"* ]]
+  DOTFILES_CLAUDE_PERMISSIONS=manage bash "$TEST_DOTFILES/.chezmoiscripts/run_after_claude-wrapper.sh"
+  run "$TEST_HOME/bin/claude" -p hi
+  [[ "$output" == *"--permission-mode bypassPermissions"* ]]
+}
+
+@test "claude wrapper: resolves keep when chezmoi runs it from a temp copy" {
+  printf '#!/bin/bash\necho "$@"\n' > "$TEST_HOME/.local/bin/claude"
+  chmod +x "$TEST_HOME/.local/bin/claude"
+  rm -f "$TEST_HOME/bin/claude"
+  mkdir -p "$TEST_DIR/chezmoi-tmp"
+  cp "$BATS_TEST_DIRNAME/../.chezmoiscripts/run_after_claude-wrapper.sh" "$TEST_DIR/chezmoi-tmp/123.run_after_claude-wrapper.sh"
+  mkdir -p "$TEST_HOME/.config/chezmoi"
+  printf 'data:\n  claude_permissions: "keep"\n' > "$TEST_HOME/.config/chezmoi/chezmoi.yaml"
+  command -v chezmoi >/dev/null 2>&1 || skip "chezmoi not installed"
+  CHEZMOI_SOURCE_DIR="$TEST_DOTFILES" bash "$TEST_DIR/chezmoi-tmp/123.run_after_claude-wrapper.sh"
+  grep -q "Tag: permissions-mode=keep$" "$TEST_HOME/bin/claude"
+  run "$TEST_HOME/bin/claude" -p hi
+  [[ "$output" != *"--permission-mode"* ]]
+}
+
+# `dotfiles apply` runs `chezmoi init`, which re-renders chezmoi.yaml from
+# .chezmoi.yaml.tmpl. The key must survive that, with or without claude_effort.
+_render_config() {
+  HOME="$TEST_HOME" chezmoi execute-template --init --source "$BATS_TEST_DIRNAME/.." \
+    --override-data "$1" < "$BATS_TEST_DIRNAME/../.chezmoi.yaml.tmpl"
+}
+
+@test "chezmoi config keeps claude_permissions keep across re-init" {
+  command -v chezmoi >/dev/null 2>&1 || skip "chezmoi not installed"
+  run _render_config '{"claude_permissions":"keep"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'claude_permissions: "keep"'* ]]
+  run _render_config '{"claude_permissions":"keep","claude_effort":"high"}'
+  [[ "$output" == *'claude_permissions: "keep"'* ]]
+}
+
+@test "chezmoi config adds no claude_permissions key when it is unset (owner default)" {
+  command -v chezmoi >/dev/null 2>&1 || skip "chezmoi not installed"
+  run _render_config '{"claude_effort":"high"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'claude_permissions'* ]]
 }

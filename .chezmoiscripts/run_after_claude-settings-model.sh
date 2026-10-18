@@ -37,16 +37,25 @@ DESIRED_PERMISSION_MODE="bypassPermissions"
 
 # Per-machine override. Env wins over chezmoi data, key by key; an unset key
 # keeps the base default above.
-#   env:          DOTFILES_CLAUDE_MODEL, DOTFILES_CLAUDE_EFFORT
-#   chezmoi data: claude_model, claude_effort (~/.config/chezmoi/chezmoi.yaml)
+#   env:          DOTFILES_CLAUDE_MODEL, DOTFILES_CLAUDE_EFFORT, DOTFILES_CLAUDE_PERMISSIONS
+#   chezmoi data: claude_model, claude_effort, claude_permissions (~/.config/chezmoi/chezmoi.yaml)
+# claude_permissions: manage (default) pins bypassPermissions and grants every
+# MCP server; keep leaves the person's permission settings and prompts alone.
 _data_model=""
 _data_effort=""
-if { [ -z "${DOTFILES_CLAUDE_MODEL:-}" ] || [ -z "${DOTFILES_CLAUDE_EFFORT:-}" ]; } \
+_data_permissions=""
+if { [ -z "${DOTFILES_CLAUDE_MODEL:-}" ] || [ -z "${DOTFILES_CLAUDE_EFFORT:-}" ] || [ -z "${DOTFILES_CLAUDE_PERMISSIONS:-}" ]; } \
   && command -v chezmoi >/dev/null 2>&1; then
-  IFS='|' read -r _data_model _data_effort < <(
-    chezmoi execute-template '{{ dig "claude_model" "" . }}|{{ dig "claude_effort" "" . }}' 2>/dev/null || true
+  IFS='|' read -r _data_model _data_effort _data_permissions < <(
+    chezmoi execute-template '{{ dig "claude_model" "" . }}|{{ dig "claude_effort" "" . }}|{{ dig "claude_permissions" "" . }}' 2>/dev/null || true
   ) || true
 fi
+PERMISSIONS_MODE="${DOTFILES_CLAUDE_PERMISSIONS:-${_data_permissions:-manage}}"
+case "$PERMISSIONS_MODE" in
+  manage|keep) ;;
+  *) echo "⚠ claude_permissions '$PERMISSIONS_MODE' is not manage or keep — using manage" >&2; PERMISSIONS_MODE="manage" ;;
+esac
+unset _data_permissions
 DESIRED_MODEL="${DOTFILES_CLAUDE_MODEL:-${_data_model:-$DESIRED_MODEL}}"
 _effort="${DOTFILES_CLAUDE_EFFORT:-${_data_effort:-$DESIRED_EFFORT}}"
 # Only the keys this Mac overrides (lib/claude-model-layer.sh); empty = unset.
@@ -63,6 +72,11 @@ unset _data_model _data_effort _effort
 # modules/claude/doctor.sh reads the resolved pair here, so check and fix agree.
 if [ "${1:-}" = "--print-desired" ]; then
   printf '%s %s\n' "$DESIRED_MODEL" "$DESIRED_EFFORT"
+  exit 0
+fi
+# The ~/bin/claude wrapper and the doctor read the permission mode here too.
+if [ "${1:-}" = "--print-permissions" ]; then
+  printf '%s\n' "$PERMISSIONS_MODE"
   exit 0
 fi
 if [ "${1:-}" = "--print-override" ]; then
@@ -90,6 +104,7 @@ else
 fi
 
 _sync_claude_mcp_permissions() {
+  [ "$PERMISSIONS_MODE" = "keep" ] && return 0
   local claude_json="$HOME/.claude.json"
   [ -f "$claude_json" ] || return 0
   local perm_tmp merged current_allow
@@ -124,10 +139,14 @@ CURRENT_MODEL="$(printf '%s' "$CURRENT" | jq -r '.model // ""')"
 CURRENT_EFFORT="$(printf '%s' "$CURRENT" | jq -r '.effortLevel // ""')"
 CURRENT_PERMISSION_MODE="$(printf '%s' "$CURRENT" | jq -r '.permissions.defaultMode // ""')"
 CURRENT_SKIP_AUTO_PROMPT="$(printf '%s' "$CURRENT" | jq -r '.skipAutoPermissionPrompt // false')"
+_permissions_current=1
+if [ "$PERMISSIONS_MODE" = "manage" ] \
+  && { [ "$CURRENT_PERMISSION_MODE" != "$DESIRED_PERMISSION_MODE" ] || [ "$CURRENT_SKIP_AUTO_PROMPT" != "true" ]; }; then
+  _permissions_current=0
+fi
 if [ "$CURRENT_MODEL" = "$DESIRED_MODEL" ] \
   && [ "$CURRENT_EFFORT" = "$DESIRED_EFFORT" ] \
-  && [ "$CURRENT_PERMISSION_MODE" = "$DESIRED_PERMISSION_MODE" ] \
-  && [ "$CURRENT_SKIP_AUTO_PROMPT" = "true" ]; then
+  && [ "$_permissions_current" = "1" ]; then
   _sync_claude_mcp_permissions
   exit 0
 fi
@@ -136,10 +155,16 @@ fi
 # `--arg` for safe string interpolation. Atomic write via tmp file.
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
-printf '%s' "$CURRENT" \
-  | jq --arg model "$DESIRED_MODEL" --arg effort "$DESIRED_EFFORT" --arg permissionMode "$DESIRED_PERMISSION_MODE" \
-       '.model = $model | .effortLevel = $effort | .permissions.defaultMode = $permissionMode | .skipAutoPermissionPrompt = true' \
-  > "$TMP"
+if [ "$PERMISSIONS_MODE" = "keep" ]; then
+  printf '%s' "$CURRENT" \
+    | jq --arg model "$DESIRED_MODEL" --arg effort "$DESIRED_EFFORT" '.model = $model | .effortLevel = $effort' \
+    > "$TMP"
+else
+  printf '%s' "$CURRENT" \
+    | jq --arg model "$DESIRED_MODEL" --arg effort "$DESIRED_EFFORT" --arg permissionMode "$DESIRED_PERMISSION_MODE" \
+         '.model = $model | .effortLevel = $effort | .permissions.defaultMode = $permissionMode | .skipAutoPermissionPrompt = true' \
+    > "$TMP"
+fi
 
 # Sanity-check the result parses as JSON before installing.
 jq -e . "$TMP" >/dev/null 2>&1 || {
@@ -148,6 +173,10 @@ jq -e . "$TMP" >/dev/null 2>&1 || {
 }
 
 mv "$TMP" "$SETTINGS"
-echo "✓ Claude Code settings.json pinned: model=$DESIRED_MODEL, effortLevel=$DESIRED_EFFORT, permissionMode=$DESIRED_PERMISSION_MODE"
+if [ "$PERMISSIONS_MODE" = "keep" ]; then
+  echo "✓ Claude Code settings.json pinned: model=$DESIRED_MODEL, effortLevel=$DESIRED_EFFORT (permissions kept)"
+else
+  echo "✓ Claude Code settings.json pinned: model=$DESIRED_MODEL, effortLevel=$DESIRED_EFFORT, permissionMode=$DESIRED_PERMISSION_MODE"
+fi
 
 _sync_claude_mcp_permissions

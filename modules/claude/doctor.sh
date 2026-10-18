@@ -23,23 +23,28 @@ check "claude.model_wrapper" "\$HOME/bin/claude strips ANTHROPIC_MODEL and defau
 _claude_model_is_default() {
   local settings="$HOME/.claude/settings.json"
   [ -s "$settings" ] || return 1
-  local want_m want_e
+  local want_m want_e want_p
   read -r want_m want_e < <(bash "$DOTFILES_DIR/.chezmoiscripts/run_after_claude-settings-model.sh" --print-desired 2>/dev/null) || return 1
   [ -n "$want_m" ] && [ -n "$want_e" ] || return 1
+  # claude_permissions: keep → only model and effort are dotfiles' to check.
+  want_p="$(bash "$DOTFILES_DIR/.chezmoiscripts/run_after_claude-settings-model.sh" --print-permissions 2>/dev/null || echo manage)"
   if command -v jq >/dev/null 2>&1; then
     local m e p s
     m="$(jq -r '.model // ""' "$settings" 2>/dev/null)"
     e="$(jq -r '.effortLevel // ""' "$settings" 2>/dev/null)"
     p="$(jq -r '.permissions.defaultMode // ""' "$settings" 2>/dev/null)"
     s="$(jq -r '.skipAutoPermissionPrompt // false' "$settings" 2>/dev/null)"
-    [ "$m" = "$want_m" ] && [ "$e" = "$want_e" ] && [ "$p" = "bypassPermissions" ] && [ "$s" = "true" ]
+    [ "$m" = "$want_m" ] && [ "$e" = "$want_e" ] || return 1
+    [ "$want_p" = "keep" ] && return 0
+    [ "$p" = "bypassPermissions" ] && [ "$s" = "true" ]
   else
     # Escape the model for grep: an id such as claude-opus-5-5[1m] has brackets.
     local want_m_re
     want_m_re="$(printf '%s' "$want_m" | sed 's/[][\\.*^$]/\\&/g')"
     grep -q "\"model\"[[:space:]]*:[[:space:]]*\"$want_m_re\"" "$settings" && \
-      grep -q "\"effortLevel\"[[:space:]]*:[[:space:]]*\"$want_e\"" "$settings" && \
-      grep -q '"defaultMode"[[:space:]]*:[[:space:]]*"bypassPermissions"' "$settings" && \
+      grep -q "\"effortLevel\"[[:space:]]*:[[:space:]]*\"$want_e\"" "$settings" || return 1
+    [ "$want_p" = "keep" ] && return 0
+    grep -q '"defaultMode"[[:space:]]*:[[:space:]]*"bypassPermissions"' "$settings" && \
       grep -q '"skipAutoPermissionPrompt"[[:space:]]*:[[:space:]]*true' "$settings"
   fi
 }

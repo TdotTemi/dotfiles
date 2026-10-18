@@ -22,12 +22,19 @@ fi
 # Ensure ~/bin exists
 mkdir -p "$HOME/bin"
 
+# claude_permissions: keep → the wrapper adds no --permission-mode.
+# chezmoi runs scripts from a temp copy, so find the pin script in the source dir.
+_pin_script="${CHEZMOI_SOURCE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/.chezmoiscripts/run_after_claude-settings-model.sh"
+PERMISSIONS_MODE="$(bash "$_pin_script" --print-permissions 2>/dev/null || true)"
+[ "$PERMISSIONS_MODE" = "keep" ] || PERMISSIONS_MODE="manage"
+
 # Skip if wrapper is already correct
 if [ -f "$WRAPPER" ] \
   && grep -q "unset ANTHROPIC_MODEL" "$WRAPPER" 2>/dev/null \
   && grep -q "default-name-from-cwd" "$WRAPPER" 2>/dev/null \
   && grep -q "default-permission-mode-bypass" "$WRAPPER" 2>/dev/null \
   && grep -q "remote-control-flags-after-verb" "$WRAPPER" 2>/dev/null \
+  && grep -q "Tag: permissions-mode=$PERMISSIONS_MODE\$" "$WRAPPER" 2>/dev/null \
   && ! grep -q "inaccessible on Enterprise accounts" "$WRAPPER" 2>/dev/null; then
   exit 0
 fi
@@ -46,6 +53,10 @@ REAL_CLAUDE="$HOME/.local/bin/claude"
 
 unset ANTHROPIC_MODEL
 
+# claude_permissions from dotfiles (manage adds bypassPermissions; keep adds nothing).
+# Tag: permissions-mode=@@PERMISSIONS_MODE@@
+_permissions_mode="@@PERMISSIONS_MODE@@"
+
 # Remote Control refuses to start when --permission-mode comes before the
 # verb, so put the default after it. Reattaching (-c, --continue,
 # --session-id) keeps the session's own mode, so add nothing then.
@@ -61,6 +72,7 @@ case "${1:-}" in
           ;;
       esac
     done
+    [ "$_permissions_mode" = "keep" ] && exec "$REAL_CLAUDE" "$_verb" "$@"
     exec "$REAL_CLAUDE" "$_verb" --permission-mode bypassPermissions "$@"
     ;;
 esac
@@ -74,7 +86,7 @@ for _arg in "$@"; do
       ;;
   esac
 done
-if [ "$_has_permission_mode" = "0" ]; then
+if [ "$_has_permission_mode" = "0" ] && [ "$_permissions_mode" != "keep" ]; then
   set -- --permission-mode bypassPermissions "$@"
 fi
 # Tag: default-permission-mode-bypass
@@ -98,6 +110,7 @@ fi
 
 exec "$REAL_CLAUDE" "$@"
 WRAPPER_EOF
+sed -i.bak "s/@@PERMISSIONS_MODE@@/$PERMISSIONS_MODE/g" "$WRAPPER" && rm -f "$WRAPPER.bak"
 
 chmod +x "$WRAPPER"
 echo "✓ Claude wrapper installed at ~/bin/claude (strips ANTHROPIC_MODEL)"
