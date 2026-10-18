@@ -88,3 +88,5 @@ TASKS.md
 .playwright-cli/
 .playwright-mcp/
 .idea/
+
+**/.claude/.cc-writes/
