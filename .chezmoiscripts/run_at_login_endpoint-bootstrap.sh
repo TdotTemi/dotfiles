@@ -53,15 +53,15 @@ if [ -x "$_bin_dir/dotfiles-adhoc-sign-ggrep" ]; then
   "$_bin_dir/dotfiles-adhoc-sign-ggrep"
 fi
 "$_bin_dir/dotfiles-adhoc-sign-uv-pythons"
-if [ -x "$_bin_dir/dotfiles-link-jq-shim" ]; then
-  "$_bin_dir/dotfiles-link-jq-shim"
-fi
-if [ -x "$_bin_dir/dotfiles-link-curl-shim" ]; then
-  "$_bin_dir/dotfiles-link-curl-shim"
-fi
-if [ -x "$_bin_dir/dotfiles-link-grep-shim" ]; then
-  "$_bin_dir/dotfiles-link-grep-shim"
-fi
+# On a first install Homebrew jq/curl/grep are not there yet (this script sorts
+# before run_onchange_brew); run_after_endpoint-security links them later in
+# the same apply.
+for _tool in jq curl grep; do
+  if [ -x "$_bin_dir/dotfiles-link-$_tool-shim" ]; then
+    "$_bin_dir/dotfiles-link-$_tool-shim" ||
+      echo "⚠ Homebrew $_tool not installed yet — run_after_endpoint-security links it"
+  fi
+done
 if [ -x "$_bin_dir/dotfiles-link-python-shim" ]; then
   # On a first install uv python is not there yet; run_after_uv-python-setup
   # installs it and links the shim later in the same apply.
