@@ -18,18 +18,31 @@ teardown() {
   rm -rf "$TEST_DIR"
 }
 
-@test "claude model layer: carries this Mac's effort override" {
-  DOTFILES_CLAUDE_EFFORT=medium claude_model_layer_write "$TEST_DIR/layer.yaml"
-  grep -qx 'defaultModel: claude-opus-5-5' "$TEST_DIR/layer.yaml"
+@test "claude model layer: carries this Mac's model and effort override" {
+  DOTFILES_CLAUDE_MODEL=claude-sonnet-5 DOTFILES_CLAUDE_EFFORT=medium \
+    claude_model_layer_write "$TEST_DIR/layer.yaml"
+  grep -qx 'defaultModel: claude-sonnet-5' "$TEST_DIR/layer.yaml"
   grep -qx 'defaultEffort: medium' "$TEST_DIR/layer.yaml"
 }
 
-@test "claude model layer: matches the Agentfile default when nothing is overridden" {
-  claude_model_layer_write "$TEST_DIR/layer.yaml"
-  base_model="$(sed -n 's/^defaultModel: //p' "$BATS_TEST_DIRNAME/../Agentfile.yaml")"
-  base_effort="$(sed -n 's/^defaultEffort: //p' "$BATS_TEST_DIRNAME/../Agentfile.yaml")"
-  grep -qx "defaultModel: $base_model" "$TEST_DIR/layer.yaml"
-  grep -qx "defaultEffort: $base_effort" "$TEST_DIR/layer.yaml"
+@test "claude model layer: carries only the overridden key" {
+  # An overlay Agentfile's defaultModel must survive an effort-only override.
+  DOTFILES_CLAUDE_EFFORT=medium claude_model_layer_write "$TEST_DIR/layer.yaml"
+  grep -qx 'defaultEffort: medium' "$TEST_DIR/layer.yaml"
+  run grep -q '^defaultModel:' "$TEST_DIR/layer.yaml"
+  [ "$status" -ne 0 ]
+}
+
+@test "claude model layer: no override writes no layer, so an overlay Agentfile pair wins" {
+  run claude_model_layer_write "$TEST_DIR/layer.yaml"
+  [ "$status" -eq 1 ]
+  [ ! -s "$TEST_DIR/layer.yaml" ]
+}
+
+@test "claude model layer: an effort Claude Code cannot persist is not written" {
+  run env DOTFILES_CLAUDE_EFFORT=max bash -c 'source "$1"; claude_model_layer_write "$2"' _ \
+    "$BATS_TEST_DIRNAME/../lib/claude-model-layer.sh" "$TEST_DIR/layer.yaml"
+  [ "$status" -eq 1 ]
 }
 
 @test "claude model layer: the sync script merges it after the other Agentfiles" {
