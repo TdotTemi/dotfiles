@@ -15,6 +15,7 @@ USE_CURSOR="{{ dig "use_cursor" true . }}"
 AUTO_SYNC="{{ dig "auto_sync" true . }}"
 CLAUDE_REMOTE_CONTROL="{{ dig "claude_remote_control" false . }}"
 IS_ENTERPRISE="{{ dig "is_enterprise" false . }}"
+USE_LOCAL_AI="{{ dig "use_local_ai" false . }}"
 
 # Tool-presence / profile check — skip agents that shouldn't load
 # Core profile only gets essential agents: sync, doctor, git-maintain,
@@ -68,6 +69,10 @@ should_skip_agent() {
     claude-remote-control)
       [ "${CLAUDE_REMOTE_CONTROL:-false}" != "true" ] && return 0
       [ ! -x "$HOME/.local/bin/claude" ] && return 0 ;;
+    # Local-AI stack (opencode serve on :4096, Ollama, model warmup): only
+    # when use_local_ai is on.
+    ollama|opencode-serve|local-ai-warmup)
+      [ "${USE_LOCAL_AI:-false}" != "true" ] && return 0 ;;
     # Retired: AgentBrew owns com.agentbrew.mcp-memory and maintenance.
     mcp-memory|mcp-memory-maintain)
       return 0 ;;
