@@ -349,3 +349,26 @@ _write_chezmoi_data() {
   run "$TEST_HOME/bin/claude" -p hi
   [[ "$output" != *"--permission-mode"* ]]
 }
+
+# `dotfiles apply` runs `chezmoi init`, which re-renders chezmoi.yaml from
+# .chezmoi.yaml.tmpl. The key must survive that, with or without claude_effort.
+_render_config() {
+  HOME="$TEST_HOME" chezmoi execute-template --init --source "$BATS_TEST_DIRNAME/.." \
+    --override-data "$1" < "$BATS_TEST_DIRNAME/../.chezmoi.yaml.tmpl"
+}
+
+@test "chezmoi config keeps claude_permissions keep across re-init" {
+  command -v chezmoi >/dev/null 2>&1 || skip "chezmoi not installed"
+  run _render_config '{"claude_permissions":"keep"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'claude_permissions: "keep"'* ]]
+  run _render_config '{"claude_permissions":"keep","claude_effort":"high"}'
+  [[ "$output" == *'claude_permissions: "keep"'* ]]
+}
+
+@test "chezmoi config adds no claude_permissions key when it is unset (owner default)" {
+  command -v chezmoi >/dev/null 2>&1 || skip "chezmoi not installed"
+  run _render_config '{"claude_effort":"high"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'claude_permissions'* ]]
+}

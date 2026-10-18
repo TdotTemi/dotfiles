@@ -150,5 +150,7 @@ data:
 {{- end }}
 {{- if $claudeEffort }}
   claude_effort: {{ $claudeEffort | quote }}
+{{- end }}
+{{- if ne $claudePermissions "manage" }}
   claude_permissions: {{ $claudePermissions | quote }}
 {{- end }}
