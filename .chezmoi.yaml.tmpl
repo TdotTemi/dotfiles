@@ -92,6 +92,22 @@
 {{- if hasKey . "auto_sync" -}}
 {{-   $autoSync = .auto_sync -}}
 {{- end -}}
+{{/* endpoint_hardening turns on the endpoint-hardening scripts: they ad-hoc
+     sign Homebrew bottles and link shims into the Homebrew prefix for an
+     endpoint-security agent, so they write outside $HOME.
+     Default: owner_machine. Set true on any Mac with such an agent. */ -}}
+{{- $endpointHardening := $ownerMachine -}}
+{{- if hasKey . "endpoint_hardening" -}}
+{{-   $endpointHardening = .endpoint_hardening -}}
+{{- end -}}
+{{/* local_ai_agents loads the local-AI LaunchAgents (opencode serve on
+     :4096, Ollama, model warmup) and runs the local-ai doctor module, whose
+     fixes install opencode. Default: use_local_ai or owner_machine, so a new
+     user's Mac gets none and the owner's Macs keep opencode serve. */ -}}
+{{- $localAiAgents := or $useLocalAi $ownerMachine -}}
+{{- if hasKey . "local_ai_agents" -}}
+{{-   $localAiAgents = .local_ai_agents -}}
+{{- end -}}
 {{/* global_git_hooks wires git-hooks/ as core.hooksPath for every repo
      (leak gates + commit-msg cleanup). Opt out with false. */ -}}
 {{- $globalGitHooks := true -}}
@@ -100,6 +116,10 @@
 {{- end -}}
 
 sourceDir: {{ .chezmoi.sourceDir | quote }}
+
+# Plain .sh lifecycle scripts read this; they cannot read template data.
+scriptEnv:
+  DOTFILES_ENDPOINT_HARDENING: {{ if $endpointHardening }}"1"{{ else }}"0"{{ end }}
 
 encryption: age
 age:
@@ -122,10 +142,12 @@ data:
   auto_upgrade: {{ $autoUpgrade }}
   auto_sync: {{ $autoSync }}
   owner_machine: {{ $ownerMachine }}
+  endpoint_hardening: {{ $endpointHardening }}
   global_git_hooks: {{ $globalGitHooks }}
   claude_remote_control: {{ $claudeRemoteControl }}
   use_ai_tools: {{ $useAiTools }}
   use_local_ai: {{ $useLocalAi }}
+  local_ai_agents: {{ $localAiAgents }}
   use_cursor: {{ $useCursor }}
   use_encryption: {{ $useEncryption }}
   age_recipient: {{ $ageRecipient | quote }}
