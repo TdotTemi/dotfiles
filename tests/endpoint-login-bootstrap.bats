@@ -110,6 +110,26 @@ EOF
   [ -f "$TEST_HOME/.local/state/dotfiles/endpoint-ready" ]
 }
 
+@test "run_at_login_endpoint-bootstrap: first install without Homebrew jq/curl/grep still succeeds" {
+  for tool in uv-pythons jq curl ggrep; do
+    printf '#!/bin/bash\nexit 0\n' >"$TEST_DOTFILES/bin/dotfiles-adhoc-sign-$tool"
+  done
+  printf '#!/bin/bash\nexit 0\n' >"$TEST_DOTFILES/bin/dotfiles-link-python-shim"
+  for tool in jq curl grep; do
+    printf '#!/bin/bash\necho "%s: Homebrew %s not found" >&2\nexit 1\n' "$tool" "$tool" \
+      >"$TEST_DOTFILES/bin/dotfiles-link-$tool-shim"
+  done
+  chmod +x "$TEST_DOTFILES/bin/"*
+  mkdir -p "$TEST_DOTFILES/.chezmoiscripts"
+  cp "$BATS_TEST_DIRNAME/../.chezmoiscripts/run_at_login_endpoint-bootstrap.sh" \
+    "$TEST_DOTFILES/.chezmoiscripts/run_at_login_endpoint-bootstrap.sh"
+  run env HOME="$TEST_HOME" DOTFILES_DIR="$TEST_DOTFILES" DOTFILES_BREW_PREFIX="$TEST_DOTFILES/stubs/opt/homebrew" \
+    bash "$TEST_DOTFILES/.chezmoiscripts/run_at_login_endpoint-bootstrap.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Homebrew jq not installed yet"* ]]
+  [ -f "$TEST_HOME/.local/state/dotfiles/endpoint-ready" ]
+}
+
 @test "endpoint-bootstrap plist template exists" {
   [ -f "$BATS_TEST_DIRNAME/../launchagents/com.dotfiles.endpoint-bootstrap.plist.tmpl" ]
   grep -q 'run_at_login_endpoint-bootstrap.sh' \

@@ -6,11 +6,11 @@
 # loops exec jq, curl, or python3.13 before adhoc-sign-bottles / link-*-shim complete.
 set -euo pipefail
 
-# The hermetic install e2e (tests/e2e/hermetic-install.sh) sets this: these
-# steps sign and link binaries inside the Homebrew prefix, outside $HOME.
-# Their own bats tests cover them.
-if [ "${DOTFILES_SKIP_ENDPOINT_HARDENING:-}" = "1" ]; then
-  echo "○ Skipping endpoint hardening (DOTFILES_SKIP_ENDPOINT_HARDENING=1)"
+# Endpoint hardening writes outside $HOME. .chezmoi.yaml.tmpl sets
+# DOTFILES_ENDPOINT_HARDENING from endpoint_hardening (default: owner_machine);
+# unset keeps the old behaviour. A managed endpoint (safe mode) always hardens.
+if [ "${DOTFILES_ENDPOINT_HARDENING:-1}" = "0" ] && [ "${DOTFILES_MANAGED_ENDPOINT:-0}" != "1" ]; then
+  echo "○ Skipping endpoint hardening (endpoint_hardening is false)"
   exit 0
 fi
 
@@ -53,15 +53,15 @@ if [ -x "$_bin_dir/dotfiles-adhoc-sign-ggrep" ]; then
   "$_bin_dir/dotfiles-adhoc-sign-ggrep"
 fi
 "$_bin_dir/dotfiles-adhoc-sign-uv-pythons"
-if [ -x "$_bin_dir/dotfiles-link-jq-shim" ]; then
-  "$_bin_dir/dotfiles-link-jq-shim"
-fi
-if [ -x "$_bin_dir/dotfiles-link-curl-shim" ]; then
-  "$_bin_dir/dotfiles-link-curl-shim"
-fi
-if [ -x "$_bin_dir/dotfiles-link-grep-shim" ]; then
-  "$_bin_dir/dotfiles-link-grep-shim"
-fi
+# On a first install Homebrew jq/curl/grep are not there yet (this script sorts
+# before run_onchange_brew); run_after_endpoint-security links them later in
+# the same apply.
+for _tool in jq curl grep; do
+  if [ -x "$_bin_dir/dotfiles-link-$_tool-shim" ]; then
+    "$_bin_dir/dotfiles-link-$_tool-shim" ||
+      echo "⚠ Homebrew $_tool not installed yet — run_after_endpoint-security links it"
+  fi
+done
 if [ -x "$_bin_dir/dotfiles-link-python-shim" ]; then
   # On a first install uv python is not there yet; run_after_uv-python-setup
   # installs it and links the shim later in the same apply.
