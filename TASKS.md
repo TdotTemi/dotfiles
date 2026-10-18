@@ -12,86 +12,77 @@ them. -->
 
 ## P1
 
-- [ ] The US05 doctor clean-run rate is back above its pivot
-  - **ID**: us05-doctor-rate-below-pivot
-  - **Tags**: us05, doctor, metrics, stability
-  - **Details**: `dotfiles metrics --table` showed the US05 row (doctor runs with no failure, last 30 runs) at 70% on 2026-10-16, past its pivot of 80% (baseline 93%). Most failing rows came from bats runs that called the real doctor without test_helper and wrote to `~/.dotfiles-stats.jsonl` (bursts within seconds, with fixture check counts); #131 stopped that. Check whether real runs still fail: run `dotfiles doctor` daily for a week, then read the row again. If real failures remain, fix the failing checks; if not, record in docs/learnings.md that the breach was test pollution.
-  - **Files**: `docs/metrics.md`, `docs/learnings.md`, failing `modules/*/doctor.sh`
-  - **Output**: code
-  - **Competitive-goal**: none — US05 outcome metric, not a scorecard metric.
-  - **Acceptance**: the US05 row reads 80% or more from real runs, or learnings records the pollution with evidence.
-  - **Hypothesis**: with test runs isolated, the last 30 real doctor runs pass at 90% or more.
-  - **Measurement**: `bin/dotfiles-metrics --table` (US05 row).
-  - **Success**: 90% or more by 2026-10-31.
-  - **Pivot**: below 80% by 2026-10-31 means real failing checks; fix them before new doctor work.
-  - **Anchor**: docs/metrics.md US05 row; checkup rule "a metric past its pivot becomes a P0 or P1 task".
-
-- [ ] Coverage traces tests that load test_helper, and the full suite is green on the owner's Mac
-  - **ID**: coverage-trap-and-full-suite-green
-  - **Tags**: tests, coverage, stability
-  - **Details**: `bin/dotfiles-coverage` installs its trace hook through `BASH_ENV=lib/coverage-trap.sh`, but `tests/test_helper.bash` runs `unset BASH_ENV ENV`, so every test that loads the helper records no lines and `tests/coverage.bats` "single test file" fails (AGENTS.md lists it as a known base failure). Keep the unset for the host bash-env, but not for the coverage trap. The same full-suite run (2026-10-16, ea81f8d) also failed tests that pass when run alone or that depend on this Mac: add-task-backend, add-unmanage, agent-browser-reap-strays, agent-browser-singleton-preflight, bin-land, chromework-install, doctor-severity-filter and doctor-validate-overrides (`sed -i ''` under the GNU sed shim on PATH), overlay-root-doctor and overlay-root-uninstall (mocks lack `lib/dotfiles-source-dir.sh`), module-jetbrains, and others. Fix or isolate each, then drop the known-failure line from AGENTS.md.
-  - **Files**: `tests/test_helper.bash`, `lib/coverage-trap.sh`, `tests/coverage.bats`, the failing test files
-  - **Output**: code
-  - **Competitive-goal**: none — gate trust; a red full suite hides real regressions (one hid in #124).
-  - **Acceptance**: `make test-force` exits 0 on the owner's Mac, and `dotfiles-coverage run tests/cheat.bats` reports covered lines above 0.
-  - **Hypothesis**: full-suite failures on unchanged feat/chezmoi go from 14 to 0, so any red run is a real regression.
-  - **Measurement**: `make test-force; echo $?` and `bats tests/coverage.bats`.
-  - **Success**: 0 failures.
-  - **Pivot**: a test that only fails on a managed endpoint gets a skip guard with the reason, not a fix.
-  - **Anchor**: Beck 2002 (test-driven development: a red bar must mean something); requirements run 2026-10-16.
-
-- [ ] The commit-msg hook keeps git trailers last when it adds the agent footer
-  - **ID**: commit-msg-footer-keeps-git-trailers-last
-  - **Tags**: git-hooks, agents, bug
-  - **Details**: `lib/strip-agent-attribution.sh` (run by `git-hooks/commit-msg`). When the hook strips a vendor attribution line, it appends `---` and the agent footer at the very end of the message. If the message ends with git trailers (`Task:`, `Task-Claim:`, `Signed-off-by:`), the footer becomes the last paragraph, so git no longer parses them (`git log --format='%(trailers:key=Task)'` is empty). On 2026-10-16 this failed the tasks.md required `claim-check` on PR #26 ("resolved task='' claim=''"). Fix: insert the footer before the trailing trailer block (use `git interpret-trailers --parse` to find it), and add a fixture test with a message ending in `Task:`/`Task-Claim:` trailers. agentbrew has a twin copy in `hooks/lib/` (task `strip-attribution-footer-keeps-git-trailers-last`).
-  - **Competitive-goal**: none — commit-hook correctness; no scorecard metric covers git hooks.
-  - **Measurement**: a `tests/` fixture that runs `git-hooks/commit-msg` on a message ending in `Task:`/`Task-Claim:` trailers and a stripped `Co-Authored-By:` line, then checks `git interpret-trailers --parse`.
-  - **Hypothesis**: placing the footer before the trailer block keeps trailers parseable; commits whose trailers the hook breaks drop from every agent commit with trailers to 0.
-  - **Success**: the new fixture passes, `git log -1 --format='%(trailers:key=Task-Claim,valueonly)'` prints the claim after the hook runs, and existing hook fixtures stay green.
-  - **Pivot**: if trailer detection misfires on plain prose endings, require a `Key: value` block that git itself parses (`git interpret-trailers --parse` non-empty) before moving anything.
-  - **Anchor**: git-interpret-trailers(1) (trailers must be the last paragraph); tasks.md docs/learnings.md row 2026-10-16.
-
 ## P2
 
-- [ ] `dotfiles add` keeps a nested config file at its own path
-  - **ID**: dotfiles-add-nested-path
-  - **Tags**: us03, add, bug
-  - **Details**: In symlink mode, `bin/dotfiles-add ~/.config/tool/tool.conf` copies the file to `home/tool.conf` and writes `symlink_dot_tool.conf.tmpl`, so `dotfiles apply` links `~/.tool.conf` instead of `~/.config/tool/tool.conf`. Found while writing the US03 story e2e (2026-10-16), which uses a top-level dotfile for now. Keep the path under `$HOME` (for example `dot_config/tool/symlink_tool.conf.tmpl`), and add a nested-file case to `tests/e2e/stories-e2e.bats`.
-  - **Files**: `bin/dotfiles-add`, `tests/dotfiles-add-family.bats`, `tests/e2e/stories-e2e.bats`
+- [ ] A rolled-back install leaves nothing behind
+  - **ID**: install-rollback-removes-created-files
+  - **Tags**: install, rollback, safety
+  - **Details**: After the first `run` aborted and restored the backup, `~/.agent-browser/` (created by chezmoi apply, absent before) was still there. The backup already records `absent.txt`; restore could remove the targets it lists that apply created.
+  - **Files**: `bin/dotfiles-install` (restore)
   - **Output**: code
-  - **Competitive-goal**: none — US03 correctness; no scorecard metric covers `dotfiles add`.
-  - **Acceptance**: after `dotfiles add ~/.config/x/y.conf` and `dotfiles apply`, `~/.config/x/y.conf` is a symlink into the repo, and no `~/.y.conf` appears.
-  - **Hypothesis**: nested files that `dotfiles add` deploys to the wrong path go from 1 of 1 to 0 of 1.
-  - **Measurement**: `make e2e` (new US03 nested-file case).
-  - **Success**: the nested case passes.
-  - **Pivot**: if chezmoi's own `chezmoi add --follow` covers this, drop symlink mode for nested files and call it (GET over IMPLEMENT).
-  - **Anchor**: US03 story e2e finding 2026-10-16.
+  - **Competitive-goal**: none — new-user install correctness.
+  - **Acceptance**: an apply that fails after creating a new target leaves `$HOME` identical (file list) to before the run.
+  - **Hypothesis**: leftover files after a rollback go to zero.
+  - **Measurement**: bats test comparing `find $HOME` before and after a forced failure.
+  - **Success**: the lists match.
+  - **Pivot**: if removing is risky, list the leftovers in the restore output instead.
+  - **Anchor**: first install on a Mac new to the tools, 2026-10-18 (dotfiles core + agentbrew recommended set).
 
-- [ ] Endpoint hardening runs only on Macs that need it
-  - **ID**: endpoint-hardening-only-where-needed
-  - **Tags**: endpoint, homebrew, new-users, portability
-  - **Details**: `run_after_endpoint-security.sh`, `run_at_login_endpoint-bootstrap.sh`, and `run_at_login_sign-uv-python.sh` ad-hoc sign Homebrew bottles and link shims into `/opt/homebrew/bin` on every apply, on every Mac. They exist for a managed endpoint-security agent. The hermetic install e2e (2026-10-16) showed they write outside `$HOME` on a new user's Mac too. Gate them on `dotfiles_managed_endpoint` or `owner_machine`, keep today's behaviour on the owner's Macs, and drop `DOTFILES_SKIP_ENDPOINT_HARDENING` from the e2e once the gate covers it.
-  - **Files**: `.chezmoiscripts/run_after_endpoint-security.sh`, `.chezmoiscripts/run_at_login_*.sh`, `tests/e2e/hermetic-install.sh`
+- [ ] Installers that append to `~/.zshrc` never change the repo
+  - **ID**: zshrc-appends-stay-local
+  - **Tags**: privacy, shell, sync
+  - **Details**: `~/.zshrc` is a symlink to `home/zshrc`, so the opencode installer's `export PATH=/Users/<name>/.opencode/bin:$PATH` landed in a tracked repo file. With `auto_sync: true`, `dotfiles-sync` would commit and push a home path to the public repo. Detect lines appended to `home/zshrc` and move them to `~/.zshrc.local` (or block the commit when a staged diff adds `/Users/`).
+  - **Files**: `bin/dotfiles-sync`, `git-hooks/pre-commit`, `modules/shell/doctor.sh`
   - **Output**: code
-  - **Acceptance**: the e2e passes without `DOTFILES_SKIP_ENDPOINT_HARDENING`; the owner's apply still signs bottles.
-  - **Hypothesis**: Homebrew-prefix writes during a new user's install go from about 10 to 0.
-  - **Measurement**: `make e2e` with the skip variable removed (the sandbox fails any write outside the scratch HOME).
-  - **Success**: e2e green with no skip variable.
-  - **Pivot**: if a new user does need signing (an endpoint agent detected late), detect it at apply time instead of gating up front.
-  - **Anchor**: Basili et al. 1994 (GQM); hermetic install e2e findings 2026-10-16.
+  - **Competitive-goal**: none — new-user install correctness.
+  - **Acceptance**: after `echo 'export X=$HOME/bin' >> ~/.zshrc`, `dotfiles-sync` commits nothing from `home/zshrc` and the line is in `~/.zshrc.local`.
+  - **Hypothesis**: personal paths reaching the public repo through shell rc appends go to zero.
+  - **Measurement**: bats test plus the existing leak gate.
+  - **Success**: the test passes and the leak gate flags `/Users/` in `home/`.
+  - **Pivot**: if moving lines is surprising, warn in `doctor` and refuse the sync instead.
+  - **Anchor**: first install on a Mac new to the tools, 2026-10-18 (dotfiles core + agentbrew recommended set).
 
-- [ ] A new user's agents get only general rules from the dotfiles Agentfile
-  - **ID**: agentfile-rules-owner-only-split
-  - **Tags**: agentbrew, rules, new-users, portability
-  - **Details**: `Agentfile.yaml` `rules:` deploys to every Mac that runs dotfiles. Some lines are the owner's personal workflow, not general advice: the "**Needed from you:**" closing line, the memory-MCP calls (`get_bootstrap_profile`, `commit_session_legacy`), the Augment/Windsurf/Devin notes, and the approved-family delivery pointer. A new user gets them too. Split them into an owner-only rules block that `dotfiles apply` merges only when `owner_machine` is true (like the hooks overlay), and keep only general rules in `Agentfile.yaml`.
-  - **Files**: `Agentfile.yaml`, `bin/dotfiles-apply` or the Agentfile merge step, `tests/stranger-readiness.bats`
+- [ ] The core profile doctor checks only core tools
+  - **ID**: core-doctor-skips-full-tools
+  - **Tags**: doctor, profiles, new-users
+  - **Details**: On a core Mac, half of the doctor failures were full-profile tools: Ghostty and its config, the lazygit config, JetBrains plugins for five IDEs that are not installed, VS Code and the `code` CLI, agent-browser, and the Dock Downloads folder. They read as broken setup to a new user. Gate those modules on `DOTFILES_PROFILE=full` (as `obsidian` does) or on the app being installed.
+  - **Files**: `modules/terminal/doctor.sh`, `modules/jetbrains/doctor.sh`, `modules/vscode/doctor.sh`, `modules/agent-browser/doctor.sh`, `modules/macos/doctor.sh`
   - **Output**: code
-  - **Acceptance**: a stranger render (owner_machine false) produces an agentbrew Agentfile without the owner-only lines; the owner's still has them.
-  - **Hypothesis**: owner-only rule lines a new user's agents load go from about 8 to 0, with no change on the owner's Macs.
-  - **Measurement**: `bats tests/stranger-readiness.bats` (new case greps the merged Agentfile for the owner-only lines).
-  - **Success**: 0 owner-only lines for a stranger, all present for the owner.
-  - **Pivot**: if the merge step cannot see `owner_machine`, move the owner lines to the owner's local `~/.config/agentbrew/shared-rules.md` instead.
-  - **Anchor**: Basili, Caldiera, Rombach 1994 (GQM); finding from the 2026-10-16 portability audit.
+  - **Competitive-goal**: none — new-user install correctness.
+  - **Acceptance**: `dotfiles doctor` on a fresh core profile reports no failure for a tool the core profile does not install.
+  - **Hypothesis**: doctor failures on a fresh core Mac drop by about half.
+  - **Measurement**: `dotfiles doctor --json` on a core e2e run.
+  - **Success**: zero failures from full-only tools.
+  - **Pivot**: if a check matters on core, make it advisory instead of skipping it.
+  - **Anchor**: first install on a Mac new to the tools, 2026-10-18 (dotfiles core + agentbrew recommended set).
+
+- [ ] `make test` works on a fresh core Mac
+  - **ID**: make-test-fresh-core-mac
+  - **Tags**: tests, contributors, new-users
+  - **Details**: `make test` failed with "parallel: command not found" (bats `--jobs` needs GNU parallel, which the core Brewfile does not install and CONTRIBUTING does not mention). With it installed, `tests/node-endpoint-safe-mode.bats` "TASKS pre-commit lint never spawns blocked Node" fails on the base branch on a Volta-managed Node Mac, and four tests (coverage harness, doctor under 90 s, two cursor checks) fail only under parallel load.
+  - **Files**: `Makefile`, `CONTRIBUTING.md`, `tests/node-endpoint-safe-mode.bats`, `tests/doctor.bats`, `tests/coverage.bats`, `tests/module-cursor.bats`
+  - **Output**: code
+  - **Competitive-goal**: none — new-user install correctness.
+  - **Acceptance**: on a fresh core Mac, `make test` runs every test (falling back to serial without parallel) and passes.
+  - **Hypothesis**: contributor test runs that fail for environment reasons go to zero.
+  - **Measurement**: `make test` on a fresh core e2e machine.
+  - **Success**: green run.
+  - **Pivot**: if the timing test is inherently flaky under load, move it to a serial job.
+  - **Anchor**: first install on a Mac new to the tools, 2026-10-18 (dotfiles core + agentbrew recommended set).
+
+- [ ] `dotfiles-install plan` shows today's numbers before it promises gains
+  - **ID**: install-plan-shows-baseline
+  - **Tags**: install, metrics, ux
+  - **Details**: The README promises a fast shell, but this Mac already started zsh in 70 ms (60 ms after). Showing the person's own baseline in `plan` (shell start, disk free, LaunchAgent count) sets honest expectations, and `dotfiles metrics` can show the same numbers after.
+  - **Files**: `bin/dotfiles-install`, `bin/dotfiles-metrics`
+  - **Output**: code
+  - **Competitive-goal**: none — new-user install correctness.
+  - **Acceptance**: `plan` prints the current zsh start median, free disk and the expected disk use of the chosen profile.
+  - **Hypothesis**: people can judge the trade (disk, background jobs, speed) before they say yes.
+  - **Measurement**: bats test on the plan output.
+  - **Success**: the three numbers appear.
+  - **Pivot**: if measuring is slow, show only disk and LaunchAgent counts.
+  - **Anchor**: first install on a Mac new to the tools, 2026-10-18 (dotfiles core + agentbrew recommended set).
 
 ## P3
 

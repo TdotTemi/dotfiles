@@ -2,7 +2,9 @@
 
 load test_helper
 
-ROOT="$BATS_TEST_DIRNAME/.."
+# Resolve the path: the audit skips any path with a `tests` part, so
+# "tests/.." would make it see 0 skills.
+ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
 SKILL_DIR="$ROOT/skills/tooling-checkup"
 SKILL="$SKILL_DIR/SKILL.md"
 EVALS="$SKILL_DIR/evals/evals.json"
@@ -49,6 +51,7 @@ make_tooling_root() {
 @test "tooling-checkup passes its own best-practice audit" {
   run python3 "$SCRIPTS/audit_agent_config.py" --skills "$SKILL_DIR"
   [ "$status" -eq 0 ]
+  [[ "$output" == *"audit: 1 skill(s)"* ]]
   [[ "$output" == *"0 error(s), 0 warning(s)"* ]]
   [ "$(wc -l < "$SKILL")" -lt 500 ]
 }
@@ -537,4 +540,22 @@ broken file://$feeds/missing.xml"
   [ "$status" -eq 0 ]
   [[ "$output" == *"research: 0 new item(s)"* ]]
   ! grep -q "$TEST_HOME" "$TEST_DIR/state/ai-research-seen.json"
+}
+
+@test "tooling-checkup gets a contributor's own PRs green without merging them" {
+  grep -q '^### Your pull requests on tooling repos you do not own' "$SKILL_DIR/SKILL.md"
+  grep -q 'gh pr list --repo <owner/repo> --author @me --state open' "$SKILL_DIR/SKILL.md"
+  grep -q 'viewerPermission' "$SKILL_DIR/SKILL.md"
+}
+
+@test "contributor PR step leaves the owner's checkup and history alone" {
+  # The owner's own repos skip the step, so the owner's run is unchanged.
+  grep -F -q 'gh api user --jq .login' "$SKILL_DIR/SKILL.md"
+  grep -F -q 'Skip a repo you own' "$SKILL_DIR/SKILL.md"
+  # A fork checkout lists PRs on its parent repo.
+  grep -F -q 'parent' "$SKILL_DIR/SKILL.md"
+  # Conflicts merge the default branch in; no force-push.
+  ! grep -q 'force-with-lease' "$SKILL_DIR/SKILL.md"
+  # The fast path must not skip Phase 2 while a contributor PR is open.
+  grep -F -q 'no open pull request of yours' "$SKILL_DIR/SKILL.md"
 }

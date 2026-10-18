@@ -171,11 +171,27 @@ fi
 if [ -n "$EXTRA_AGENTFILE" ] && [ -f "$EXTRA_AGENTFILE" ]; then
   AGENTFILE_PATHS+=("$EXTRA_AGENTFILE")
 fi
+# owner_machine=true (chezmoi data, or DOTFILES_OWNER_MACHINE): owner-only rules.
+if [ "${DOTFILES_OWNER_MACHINE:-$(chezmoi execute-template '{{ dig "owner_machine" true . }}' 2>/dev/null || echo true)}" = "true" ] \
+    && [ -f "$DOTFILES_DIR/config/agentfile-owner-rules.yaml" ]; then
+  AGENTFILE_PATHS+=("$DOTFILES_DIR/config/agentfile-owner-rules.yaml")
+fi
 # use_cursor=false (chezmoi data, or DOTFILES_USE_CURSOR=false): exclude Cursor.
 NO_CURSOR_AGENTFILE="$DOTFILES_DIR/config/agentfile-no-cursor.yaml"
 if [ "${DOTFILES_USE_CURSOR:-$(chezmoi execute-template '{{ dig "use_cursor" true . }}' 2>/dev/null || echo true)}" = "false" ] \
     && [ -f "$NO_CURSOR_AGENTFILE" ]; then
   AGENTFILE_PATHS+=("$NO_CURSOR_AGENTFILE")
+fi
+
+# This Mac's Claude model/effort, merged last (lib/claude-model-layer.sh).
+# shellcheck source=../lib/claude-model-layer.sh
+[ -f "$DOTFILES_DIR/lib/claude-model-layer.sh" ] && source "$DOTFILES_DIR/lib/claude-model-layer.sh"
+if [ "${#AGENTFILE_PATHS[@]}" -gt 0 ]; then
+  CLAUDE_MODEL_LAYER="$(mktemp "${TMPDIR:-/tmp}/dotfiles-claude-model.XXXXXX")"
+  trap 'rm -f "$CLAUDE_MODEL_LAYER"' EXIT
+  if declare -F claude_model_layer_write >/dev/null && claude_model_layer_write "$CLAUDE_MODEL_LAYER"; then
+    AGENTFILE_PATHS+=("$CLAUDE_MODEL_LAYER")
+  fi
 fi
 
 if [ "${#AGENTFILE_PATHS[@]}" -gt 0 ]; then
