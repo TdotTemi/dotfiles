@@ -33,6 +33,12 @@
 {{- if hasKey . "claude_effort" -}}
 {{-   $claudeEffort = .claude_effort -}}
 {{- end -}}
+{{/* claude_permissions: manage (default) pins bypassPermissions in Claude
+     Code and the ~/bin/claude wrapper; keep leaves the person's prompts on. */ -}}
+{{- $claudePermissions := "manage" -}}
+{{- if hasKey . "claude_permissions" -}}
+{{-   $claudePermissions = .claude_permissions -}}
+{{- end -}}
 {{- $autoUpgrade := promptBoolOnce . "auto_upgrade" "Enable auto-upgrade LaunchAgent (brew upgrade at 3am Sunday)" false -}}
 {{- $useEncryption := promptBoolOnce . "use_encryption" "Enable age encryption (requires ~/.config/chezmoi/key.txt)" false -}}
 {{- $ageRecipient := "unused-no-encryption-configured" -}}
@@ -144,4 +150,5 @@ data:
 {{- end }}
 {{- if $claudeEffort }}
   claude_effort: {{ $claudeEffort | quote }}
+  claude_permissions: {{ $claudePermissions | quote }}
 {{- end }}
