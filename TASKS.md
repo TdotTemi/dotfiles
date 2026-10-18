@@ -53,6 +53,90 @@ them. -->
 
 ## P2
 
+- [ ] `dotfiles-install plan` lists what `run` will actually need
+  - **ID**: install-plan-prereqs-match-run
+  - **Tags**: install, new-users, ux
+  - **Details**: On a Mac without chezmoi, `plan` printed "→ chezmoi: brew install chezmoi" and then "✓ chezmoi (installed)". It also passes `jq` on `/usr/bin/jq`, while the endpoint scripts refuse anything but Homebrew jq (the first `run` then aborted until that was fixed). Make `plan` and `preflight` say "will be installed" for chezmoi and Homebrew jq instead of a check mark.
+  - **Files**: `bin/dotfiles-install`, `tests/dotfiles-install*.bats`
+  - **Output**: code
+  - **Competitive-goal**: none — new-user install correctness.
+  - **Acceptance**: with no chezmoi and only `/usr/bin/jq`, `plan` shows both as "will be installed" and no ✓ for them.
+  - **Hypothesis**: contradictory prerequisite lines in `plan` go to zero.
+  - **Measurement**: bats test with a PATH stub that lacks chezmoi and Homebrew jq.
+  - **Success**: the test passes.
+  - **Pivot**: if `preflight` must stay strict, install chezmoi and jq in `run` before the check.
+  - **Anchor**: first install on a Mac new to the tools, 2026-10-18 (dotfiles core + agentbrew recommended set).
+
+- [ ] A rolled-back install leaves nothing behind
+  - **ID**: install-rollback-removes-created-files
+  - **Tags**: install, rollback, safety
+  - **Details**: After the first `run` aborted and restored the backup, `~/.agent-browser/` (created by chezmoi apply, absent before) was still there. The backup already records `absent.txt`; restore could remove the targets it lists that apply created.
+  - **Files**: `bin/dotfiles-install` (restore)
+  - **Output**: code
+  - **Competitive-goal**: none — new-user install correctness.
+  - **Acceptance**: an apply that fails after creating a new target leaves `$HOME` identical (file list) to before the run.
+  - **Hypothesis**: leftover files after a rollback go to zero.
+  - **Measurement**: bats test comparing `find $HOME` before and after a forced failure.
+  - **Success**: the lists match.
+  - **Pivot**: if removing is risky, list the leftovers in the restore output instead.
+  - **Anchor**: first install on a Mac new to the tools, 2026-10-18 (dotfiles core + agentbrew recommended set).
+
+- [ ] Installers that append to `~/.zshrc` never change the repo
+  - **ID**: zshrc-appends-stay-local
+  - **Tags**: privacy, shell, sync
+  - **Details**: `~/.zshrc` is a symlink to `home/zshrc`, so the opencode installer's `export PATH=/Users/<name>/.opencode/bin:$PATH` landed in a tracked repo file. With `auto_sync: true`, `dotfiles-sync` would commit and push a home path to the public repo. Detect lines appended to `home/zshrc` and move them to `~/.zshrc.local` (or block the commit when a staged diff adds `/Users/`).
+  - **Files**: `bin/dotfiles-sync`, `git-hooks/pre-commit`, `modules/shell/doctor.sh`
+  - **Output**: code
+  - **Competitive-goal**: none — new-user install correctness.
+  - **Acceptance**: after `echo 'export X=$HOME/bin' >> ~/.zshrc`, `dotfiles-sync` commits nothing from `home/zshrc` and the line is in `~/.zshrc.local`.
+  - **Hypothesis**: personal paths reaching the public repo through shell rc appends go to zero.
+  - **Measurement**: bats test plus the existing leak gate.
+  - **Success**: the test passes and the leak gate flags `/Users/` in `home/`.
+  - **Pivot**: if moving lines is surprising, warn in `doctor` and refuse the sync instead.
+  - **Anchor**: first install on a Mac new to the tools, 2026-10-18 (dotfiles core + agentbrew recommended set).
+
+- [ ] The core profile doctor checks only core tools
+  - **ID**: core-doctor-skips-full-tools
+  - **Tags**: doctor, profiles, new-users
+  - **Details**: On a core Mac, half of the doctor failures were full-profile tools: Ghostty and its config, the lazygit config, JetBrains plugins for five IDEs that are not installed, VS Code and the `code` CLI, agent-browser, and the Dock Downloads folder. They read as broken setup to a new user. Gate those modules on `DOTFILES_PROFILE=full` (as `obsidian` does) or on the app being installed.
+  - **Files**: `modules/terminal/doctor.sh`, `modules/jetbrains/doctor.sh`, `modules/vscode/doctor.sh`, `modules/agent-browser/doctor.sh`, `modules/macos/doctor.sh`
+  - **Output**: code
+  - **Competitive-goal**: none — new-user install correctness.
+  - **Acceptance**: `dotfiles doctor` on a fresh core profile reports no failure for a tool the core profile does not install.
+  - **Hypothesis**: doctor failures on a fresh core Mac drop by about half.
+  - **Measurement**: `dotfiles doctor --json` on a core e2e run.
+  - **Success**: zero failures from full-only tools.
+  - **Pivot**: if a check matters on core, make it advisory instead of skipping it.
+  - **Anchor**: first install on a Mac new to the tools, 2026-10-18 (dotfiles core + agentbrew recommended set).
+
+- [ ] `make test` works on a fresh core Mac
+  - **ID**: make-test-fresh-core-mac
+  - **Tags**: tests, contributors, new-users
+  - **Details**: `make test` failed with "parallel: command not found" (bats `--jobs` needs GNU parallel, which the core Brewfile does not install and CONTRIBUTING does not mention). With it installed, `tests/node-endpoint-safe-mode.bats` "TASKS pre-commit lint never spawns blocked Node" fails on the base branch on a Volta-managed Node Mac, and four tests (coverage harness, doctor under 90 s, two cursor checks) fail only under parallel load.
+  - **Files**: `Makefile`, `CONTRIBUTING.md`, `tests/node-endpoint-safe-mode.bats`, `tests/doctor.bats`, `tests/coverage.bats`, `tests/module-cursor.bats`
+  - **Output**: code
+  - **Competitive-goal**: none — new-user install correctness.
+  - **Acceptance**: on a fresh core Mac, `make test` runs every test (falling back to serial without parallel) and passes.
+  - **Hypothesis**: contributor test runs that fail for environment reasons go to zero.
+  - **Measurement**: `make test` on a fresh core e2e machine.
+  - **Success**: green run.
+  - **Pivot**: if the timing test is inherently flaky under load, move it to a serial job.
+  - **Anchor**: first install on a Mac new to the tools, 2026-10-18 (dotfiles core + agentbrew recommended set).
+
+- [ ] `dotfiles-install plan` shows today's numbers before it promises gains
+  - **ID**: install-plan-shows-baseline
+  - **Tags**: install, metrics, ux
+  - **Details**: The README promises a fast shell, but this Mac already started zsh in 70 ms (60 ms after). Showing the person's own baseline in `plan` (shell start, disk free, LaunchAgent count) sets honest expectations, and `dotfiles metrics` can show the same numbers after.
+  - **Files**: `bin/dotfiles-install`, `bin/dotfiles-metrics`
+  - **Output**: code
+  - **Competitive-goal**: none — new-user install correctness.
+  - **Acceptance**: `plan` prints the current zsh start median, free disk and the expected disk use of the chosen profile.
+  - **Hypothesis**: people can judge the trade (disk, background jobs, speed) before they say yes.
+  - **Measurement**: bats test on the plan output.
+  - **Success**: the three numbers appear.
+  - **Pivot**: if measuring is slow, show only disk and LaunchAgent counts.
+  - **Anchor**: first install on a Mac new to the tools, 2026-10-18 (dotfiles core + agentbrew recommended set).
+
 - [ ] `dotfiles add` keeps a nested config file at its own path
   - **ID**: dotfiles-add-nested-path
   - **Tags**: us03, add, bug
