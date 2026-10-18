@@ -538,3 +538,10 @@ broken file://$feeds/missing.xml"
   [[ "$output" == *"research: 0 new item(s)"* ]]
   ! grep -q "$TEST_HOME" "$TEST_DIR/state/ai-research-seen.json"
 }
+
+@test "tooling-checkup gets a contributor's own PRs green without merging them" {
+  grep -q '^### Your pull requests on tooling repos you do not own' "$SKILL_DIR/SKILL.md"
+  grep -q 'gh pr list --repo <owner/repo> --author @me --state open' "$SKILL_DIR/SKILL.md"
+  grep -q 'viewerPermission' "$SKILL_DIR/SKILL.md"
+  grep -q 'force-with-lease' "$SKILL_DIR/SKILL.md"
+}
