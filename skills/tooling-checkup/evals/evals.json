@@ -154,7 +154,8 @@
         "Fixes the red check on the PR branch and pushes to the user's fork, not to the owner's repository",
         "Changes the code or answers the review comment, then resolves the thread",
         "Merges only with ADMIN, MAINTAIN, or WRITE permission, green checks and an approval; otherwise leaves it for the owner",
-        "Reports each open PR as green with zero unresolved threads, or with its blocker"
+        "Reports each open PR as green with zero unresolved threads, or with its blocker",
+        "Skips repositories the user owns and never rebases or force-pushes a PR branch"
       ]
     }
   ]
