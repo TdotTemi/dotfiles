@@ -6,11 +6,11 @@
 # loops exec jq, curl, or python3.13 before adhoc-sign-bottles / link-*-shim complete.
 set -euo pipefail
 
-# The hermetic install e2e (tests/e2e/hermetic-install.sh) sets this: these
-# steps sign and link binaries inside the Homebrew prefix, outside $HOME.
-# Their own bats tests cover them.
-if [ "${DOTFILES_SKIP_ENDPOINT_HARDENING:-}" = "1" ]; then
-  echo "○ Skipping endpoint hardening (DOTFILES_SKIP_ENDPOINT_HARDENING=1)"
+# Endpoint hardening writes outside $HOME. .chezmoi.yaml.tmpl sets
+# DOTFILES_ENDPOINT_HARDENING from endpoint_hardening (default: owner_machine);
+# unset keeps the old behaviour. A managed endpoint (safe mode) always hardens.
+if [ "${DOTFILES_ENDPOINT_HARDENING:-1}" = "0" ] && [ "${DOTFILES_MANAGED_ENDPOINT:-0}" != "1" ]; then
+  echo "○ Skipping endpoint hardening (endpoint_hardening is false)"
   exit 0
 fi
 
