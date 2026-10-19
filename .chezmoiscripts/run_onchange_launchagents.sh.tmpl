@@ -5,6 +5,7 @@
 # auto_sync: {{ dig "auto_sync" true . }}
 # claude_remote_control: {{ dig "claude_remote_control" false . }}
 # endpoint_hardening: {{ dig "endpoint_hardening" true . }}
+# capslock_control: {{ dig "capslock_control" (dig "owner_machine" false .) . }}
 # duplicate rules: {{ include "lib/launchagent-duplicates.sh" | sha256sum }}
 # self-reload rules: {{ include "lib/self-reload.sh" | sha256sum }}
 set -euo pipefail
@@ -19,13 +20,17 @@ IS_ENTERPRISE="{{ dig "is_enterprise" false . }}"
 # local_ai_agents: use_local_ai or owner_machine unless set (see .chezmoi.yaml.tmpl).
 LOCAL_AI_AGENTS="{{ dig "local_ai_agents" (or (dig "use_local_ai" false .) (dig "owner_machine" false .)) . }}"
 ENDPOINT_HARDENING="{{ dig "endpoint_hardening" true . }}"
+# capslock_control: owner_machine unless set (see .chezmoi.yaml.tmpl).
+CAPSLOCK_CONTROL="{{ dig "capslock_control" (dig "owner_machine" false .) . }}"
 
 # Tool-presence / profile check — skip agents that shouldn't load
 # Core profile only gets essential agents: sync, doctor, git-maintain,
-# capslock-control, gui-path, network-resilience. Everything else requires full.
+# capslock-control (capslock_control only), gui-path, network-resilience. Everything else requires full.
 should_skip_agent() {
   local short="$1"
   case "$short" in
+    capslock-control)
+      [ "$CAPSLOCK_CONTROL" = "false" ] && return 0 ;;
     # CDP debug ports are a localhost attack vector — require full profile
     agent-browser-chrome|debug-chrome|tooling-chrome|chrome-debug)
       [ "$PROFILE" != "full" ] && return 0 ;;
@@ -230,6 +235,30 @@ for active in "$HOME"/Library/LaunchAgents/com.dotfiles.*.plist; do
   launchctl unload "$active" 2>/dev/null || true
   rm -f "$active"
 done
+
+# ── Caps Lock opt-out — clear the live remap too ────────────────────
+# Unloading com.dotfiles.capslock-control does not undo the hidutil mapping it
+# set at login. Clear it, but only when Caps Lock → Control is the only remap:
+# other remaps are the person's own.
+capslock_clear_live_mapping() {
+  [ "${CAPSLOCK_CONTROL:-true}" = "false" ] || return 0
+  command -v hidutil >/dev/null 2>&1 || return 0
+  local mapping
+  mapping="$(hidutil property --get UserKeyMapping 2>/dev/null | tr -d ' \n')" || return 0
+  # 30064771129 = 0x700000039 (Caps Lock), 30064771296 = 0x7000000E0 (Left Control)
+  case "$mapping" in
+    *30064771129*) ;;
+    *) return 0 ;;
+  esac
+  if [ "$(printf '%s' "$mapping" | grep -o 'HIDKeyboardModifierMappingSrc' | wc -l | tr -d ' ')" = "1" ] \
+    && printf '%s' "$mapping" | grep -q 30064771296; then
+    hidutil property --set '{"UserKeyMapping":[]}' >/dev/null 2>&1 \
+      && echo "✓ Caps Lock works as Caps Lock again (cleared the live Control remap)"
+  else
+    echo "⚠ capslock_control is false, but other key remaps are active; clear Caps Lock → Control by hand"
+  fi
+}
+capslock_clear_live_mapping
 
 # ── Duplicate unload — one LaunchAgent per job ──────────────────────
 # An older install under another label prefix, or a hand-installed copy,

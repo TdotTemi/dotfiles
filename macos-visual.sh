@@ -37,7 +37,10 @@ if command -v dockutil &>/dev/null; then
 fi
 
 # ── Caps Lock → Control ──────────────────────────────────────────────
-hidutil property --set '{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0x7000000E0}]}' >/dev/null 2>&1
+# Opt out with capslock_control: false in chezmoi data.
+if [ "${DOTFILES_CAPSLOCK_CONTROL:-true}" != "false" ]; then
+  hidutil property --set '{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0x7000000E0}]}' >/dev/null 2>&1
+fi
 
 # ── Restart affected services ────────────────────────────────────────
 killall Dock 2>/dev/null || true
