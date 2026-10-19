@@ -505,3 +505,29 @@ JSON
   [ "$status" -eq 1 ]
   [[ "$output" == *"invalid macOS defaults data"* ]]
 }
+
+@test "apply_defaults skips keys listed in the skip file" {
+  cat > "$TEST_DOTFILES/data/macos-defaults.json" <<'JSON'
+[
+  {"domain": "com.apple.screencapture", "key": "show-thumbnail", "type": "bool", "value": false, "section": "Screenshots", "script": "core"},
+  {"domain": "com.apple.screencapture", "key": "type", "type": "string", "value": "png", "section": "Screenshots", "script": "core"}
+]
+JSON
+  mkdir -p "$HOME/.config/dotfiles"
+  printf '# keep the screenshot preview\ncom.apple.screencapture show-thumbnail\n' > "$HOME/.config/dotfiles/macos-defaults-skip"
+  source "$TEST_DOTFILES/lib/apply-defaults.sh"
+  apply_defaults core
+  ! grep -q 'show-thumbnail' "$MOCK_LOG"
+  grep -q 'write com.apple.screencapture type -string png' "$MOCK_LOG"
+}
+
+@test "apply_defaults writes every key when there is no skip file" {
+  cat > "$TEST_DOTFILES/data/macos-defaults.json" <<'JSON'
+[
+  {"domain": "com.apple.screencapture", "key": "show-thumbnail", "type": "bool", "value": false, "section": "Screenshots", "script": "core"}
+]
+JSON
+  source "$TEST_DOTFILES/lib/apply-defaults.sh"
+  apply_defaults core
+  grep -q 'write com.apple.screencapture show-thumbnail -bool false' "$MOCK_LOG"
+}

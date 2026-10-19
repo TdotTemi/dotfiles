@@ -6,6 +6,9 @@
 #   [{ "domain", "key", "type", "value", "section", "script",
 #      "currenthost"?: bool, "expand_vars"?: bool }]
 
+# Skip list: ~/.config/dotfiles/macos-defaults-skip (or $DOTFILES_MACOS_DEFAULTS_SKIP),
+# one "domain key" per line. Listed keys are never written.
+#
 # Requires: jq
 
 apply_defaults() {
@@ -49,8 +52,16 @@ apply_defaults() {
     return 1
   fi
 
+  # Keys the person keeps as their own: one "domain key" per line, # comments.
+  local skip_file="${DOTFILES_MACOS_DEFAULTS_SKIP:-$HOME/.config/dotfiles/macos-defaults-skip}"
+  local skip_list=""
+  [ -f "$skip_file" ] && skip_list="$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$skip_file" | awk '{print $1" "$2}')"
+
   # Read entries for this script, output tab-separated fields
   while IFS=$'\t' read -r domain key dtype value currenthost expand_vars _section; do
+    if [ -n "$skip_list" ] && printf '%s\n' "$skip_list" | grep -qxF "$domain $key"; then
+      continue
+    fi
     # Expand $HOME if needed
     if [ "$expand_vars" = "true" ]; then
       value="${value//\$HOME/$HOME}"
