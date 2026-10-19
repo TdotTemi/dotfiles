@@ -244,7 +244,7 @@ capslock_clear_live_mapping() {
   [ "${CAPSLOCK_CONTROL:-true}" = "false" ] || return 0
   command -v hidutil >/dev/null 2>&1 || return 0
   local mapping
-  mapping="$(hidutil property --get UserKeyMapping 2>/dev/null | tr -d ' \n')"
+  mapping="$(hidutil property --get UserKeyMapping 2>/dev/null | tr -d ' \n')" || return 0
   # 30064771129 = 0x700000039 (Caps Lock), 30064771296 = 0x7000000E0 (Left Control)
   case "$mapping" in
     *30064771129*) ;;

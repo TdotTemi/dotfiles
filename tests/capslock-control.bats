@@ -83,3 +83,54 @@ CAPS_ONLY='(
   grep -q '\$capslockControl := \$ownerMachine' "$BATS_TEST_DIRNAME/../.chezmoi.yaml.tmpl"
   grep -q 'CAPSLOCK_CONTROL="{{ dig "capslock_control" (dig "owner_machine" false .) . }}"' "$TMPL"
 }
+
+@test "a failing hidutil --get cannot abort the set -euo pipefail apply script" {
+  cat > "$TEST_DIR/bin/hidutil" <<'STUB'
+#!/bin/bash
+echo "$*" >> "$HIDUTIL_LOG"
+exit 1
+STUB
+  chmod +x "$TEST_DIR/bin/hidutil"
+  run bash -c "set -euo pipefail; $(declare -f capslock_clear_live_mapping); CAPSLOCK_CONTROL=false; capslock_clear_live_mapping; echo reached-end"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *reached-end* ]]
+}
+
+# `dotfiles apply` runs `chezmoi init`, which re-renders chezmoi.yaml from
+# .chezmoi.yaml.tmpl. Render it for real: the owner keeps the remap, a new
+# user does not, and an explicit choice survives a second init.
+_render_config() {
+  HOME="$TEST_DIR" chezmoi execute-template --init --source "$BATS_TEST_DIRNAME/.." \
+    --override-data "$1" < "$BATS_TEST_DIRNAME/../.chezmoi.yaml.tmpl"
+}
+
+_render_launchagents() {
+  HOME="$TEST_DIR" chezmoi execute-template --source "$BATS_TEST_DIRNAME/.." \
+    --override-data "$1" < "$TMPL" | grep '^CAPSLOCK_CONTROL='
+}
+
+@test "owner Mac (owner_machine true, no capslock_control key) keeps the remap after init" {
+  command -v chezmoi >/dev/null 2>&1 || skip "chezmoi not installed"
+  run _render_config '{"owner_machine":true,"profile":"full"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'\n  capslock_control: true'* ]]
+  run _render_launchagents '{"owner_machine":true,"profile":"full"}'
+  [ "$output" = 'CAPSLOCK_CONTROL="true"' ]
+}
+
+@test "new user (owner_machine false) gets the remap off after init" {
+  command -v chezmoi >/dev/null 2>&1 || skip "chezmoi not installed"
+  run _render_config '{"owner_machine":false,"profile":"core"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'\n  capslock_control: false'* ]]
+  run _render_launchagents '{"owner_machine":false,"profile":"core"}'
+  [ "$output" = 'CAPSLOCK_CONTROL="false"' ]
+}
+
+@test "an explicit capslock_control choice survives re-init on both kinds of Mac" {
+  command -v chezmoi >/dev/null 2>&1 || skip "chezmoi not installed"
+  run _render_config '{"owner_machine":true,"capslock_control":false}'
+  [[ "$output" == *$'\n  capslock_control: false'* ]]
+  run _render_config '{"owner_machine":false,"capslock_control":true}'
+  [[ "$output" == *$'\n  capslock_control: true'* ]]
+}
