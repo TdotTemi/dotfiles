@@ -108,8 +108,9 @@
 {{- end -}}
 {{/* capslock_control maps Caps Lock to Control (LaunchAgent
      com.dotfiles.capslock-control, plus macos-visual.sh on full).
-     Default: true. Set false to keep Caps Lock as Caps Lock. */ -}}
-{{- $capslockControl := true -}}
+     Default: owner_machine, so a new user's Mac keeps Caps Lock as Caps
+     Lock. Set true to opt in, or false to opt out. */ -}}
+{{- $capslockControl := $ownerMachine -}}
 {{- if hasKey . "capslock_control" -}}
 {{-   $capslockControl = .capslock_control -}}
 {{- end -}}

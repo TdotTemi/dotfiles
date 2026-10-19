@@ -18,7 +18,7 @@ bash "{{ .chezmoi.sourceDir }}/macos.sh"
 
 {{ if eq .profile "full" -}}
 echo "→ Applying visual preferences..."
-DOTFILES_CAPSLOCK_CONTROL="{{ dig "capslock_control" true . }}" bash "{{ .chezmoi.sourceDir }}/macos-visual.sh"
+DOTFILES_CAPSLOCK_CONTROL="{{ dig "capslock_control" (dig "owner_machine" false .) . }}" bash "{{ .chezmoi.sourceDir }}/macos-visual.sh"
 echo "→ Applying app preferences..."
 bash "{{ .chezmoi.sourceDir }}/macos-apps.sh"
 {{- end }}

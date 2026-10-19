@@ -70,11 +70,16 @@ CAPS_ONLY='(
 @test "macos-visual.sh remaps Caps Lock only when capslock_control is not false" {
   run grep -B2 'HIDKeyboardModifierMappingSrc' "$BATS_TEST_DIRNAME/../macos-visual.sh"
   [[ "$output" == *'DOTFILES_CAPSLOCK_CONTROL:-true}" != "false"'* ]]
-  grep -q 'DOTFILES_CAPSLOCK_CONTROL="{{ dig "capslock_control" true . }}"' \
+  grep -q 'DOTFILES_CAPSLOCK_CONTROL="{{ dig "capslock_control" (dig "owner_machine" false .) . }}"' \
     "$BATS_TEST_DIRNAME/../.chezmoiscripts/run_onchange_macos.sh.tmpl"
 }
 
 @test "chezmoi config keeps capslock_control across chezmoi init" {
   grep -q 'hasKey . "capslock_control"' "$BATS_TEST_DIRNAME/../.chezmoi.yaml.tmpl"
   grep -q '^  capslock_control: {{ \$capslockControl }}' "$BATS_TEST_DIRNAME/../.chezmoi.yaml.tmpl"
+}
+
+@test "capslock_control defaults to owner_machine, so a new user keeps Caps Lock" {
+  grep -q '\$capslockControl := \$ownerMachine' "$BATS_TEST_DIRNAME/../.chezmoi.yaml.tmpl"
+  grep -q 'CAPSLOCK_CONTROL="{{ dig "capslock_control" (dig "owner_machine" false .) . }}"' "$TMPL"
 }

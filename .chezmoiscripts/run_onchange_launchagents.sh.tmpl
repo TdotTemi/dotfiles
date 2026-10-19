@@ -5,7 +5,7 @@
 # auto_sync: {{ dig "auto_sync" true . }}
 # claude_remote_control: {{ dig "claude_remote_control" false . }}
 # endpoint_hardening: {{ dig "endpoint_hardening" true . }}
-# capslock_control: {{ dig "capslock_control" true . }}
+# capslock_control: {{ dig "capslock_control" (dig "owner_machine" false .) . }}
 # duplicate rules: {{ include "lib/launchagent-duplicates.sh" | sha256sum }}
 # self-reload rules: {{ include "lib/self-reload.sh" | sha256sum }}
 set -euo pipefail
@@ -20,12 +20,12 @@ IS_ENTERPRISE="{{ dig "is_enterprise" false . }}"
 # local_ai_agents: use_local_ai or owner_machine unless set (see .chezmoi.yaml.tmpl).
 LOCAL_AI_AGENTS="{{ dig "local_ai_agents" (or (dig "use_local_ai" false .) (dig "owner_machine" false .)) . }}"
 ENDPOINT_HARDENING="{{ dig "endpoint_hardening" true . }}"
-# Set capslock_control: false to keep Caps Lock as Caps Lock.
-CAPSLOCK_CONTROL="{{ dig "capslock_control" true . }}"
+# capslock_control: owner_machine unless set (see .chezmoi.yaml.tmpl).
+CAPSLOCK_CONTROL="{{ dig "capslock_control" (dig "owner_machine" false .) . }}"
 
 # Tool-presence / profile check — skip agents that shouldn't load
 # Core profile only gets essential agents: sync, doctor, git-maintain,
-# capslock-control, gui-path, network-resilience. Everything else requires full.
+# capslock-control (capslock_control only), gui-path, network-resilience. Everything else requires full.
 should_skip_agent() {
   local short="$1"
   case "$short" in
