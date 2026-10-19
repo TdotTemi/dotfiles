@@ -106,6 +106,14 @@
 {{- if hasKey . "endpoint_hardening" -}}
 {{-   $endpointHardening = .endpoint_hardening -}}
 {{- end -}}
+{{/* capslock_control maps Caps Lock to Control (LaunchAgent
+     com.dotfiles.capslock-control, plus macos-visual.sh on full).
+     Default: owner_machine, so a new user's Mac keeps Caps Lock as Caps
+     Lock. Set true to opt in, or false to opt out. */ -}}
+{{- $capslockControl := $ownerMachine -}}
+{{- if hasKey . "capslock_control" -}}
+{{-   $capslockControl = .capslock_control -}}
+{{- end -}}
 {{/* local_ai_agents loads the local-AI LaunchAgents (opencode serve on
      :4096, Ollama, model warmup) and runs the local-ai doctor module, whose
      fixes install opencode. Default: use_local_ai or owner_machine, so a new
@@ -149,6 +157,7 @@ data:
   auto_sync: {{ $autoSync }}
   owner_machine: {{ $ownerMachine }}
   endpoint_hardening: {{ $endpointHardening }}
+  capslock_control: {{ $capslockControl }}
   global_git_hooks: {{ $globalGitHooks }}
   claude_remote_control: {{ $claudeRemoteControl }}
   use_ai_tools: {{ $useAiTools }}
