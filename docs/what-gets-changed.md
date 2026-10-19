@@ -143,7 +143,7 @@ Deployed to `~/Library/LaunchAgents/com.dotfiles.*` via `run_onchange_launchagen
 | `dotfiles-doctor` | Monday 9:00 AM | all | Weekly health check with `--fix` |
 | `cleanup` | Periodic | all | Clean caches, logs, and temp files |
 | `git-maintain` | Periodic | all | Git gc, prune, and maintenance across repos |
-| `capslock-control` | At load | all | Remap Caps Lock to Control |
+| `capslock-control` | At load | all | Remap Caps Lock to Control (skipped and cleared when `capslock_control: false`) |
 | `gui-path` | At load | all | Ensure GUI apps inherit shell PATH |
 | `network-resilience` | Periodic | all | Monitor and recover network connectivity |
 | `atuin-daemon` | At load | all | Background shell history daemon (if atuin installed) |
