@@ -44,8 +44,10 @@ Show the person, in your own short words:
   installed` is a tool that `run` installs with Homebrew; `plan` installs
   nothing,
 - their Mac today, from the "Your Mac today" lines: zsh start median, free
-  disk, LaunchAgents, and the disk the chosen profile will use (after the
-  install, `dotfiles metrics --baseline` prints the same lines to compare),
+  disk, LaunchAgents, and the disk the chosen profile will use. `run` saves
+  the same numbers before it changes anything, in an install receipt
+  (`~/.local/state/dotfiles/install-receipt.json`, with the time to
+  configured); later, `dotfiles metrics --gains` prints before vs now,
 - what will change: shell and git config, Homebrew packages, macOS settings,
   background jobs, then agentbrew,
 - that a backup is made first: config files, LaunchAgents, the chezmoi
@@ -91,6 +93,12 @@ Get a clear yes to the plan, then run it in a terminal the person can see
 bash <DIR>/bin/dotfiles-install run --yes --profile core --name "..." --email "..." [more flags]
 ```
 
+Measure first. The first thing `run` does, before preflight or any change,
+is save this Mac's "before" numbers to the install receipt: zsh start, free
+disk, LaunchAgents, and the agent setup already there (Claude Code skills,
+hooks, CLAUDE.md size, permission mode). Do not install anything by hand
+before `run`, or the "before" numbers stop being before.
+
 The script backs up, runs `chezmoi apply`, heals with `dotfiles doctor
 --fix`, verifies with `chezmoi verify` and a clean zsh start, and then runs
 agentbrew's installer. On a critical error it restores the backup by itself
@@ -106,6 +114,10 @@ Tell the person:
 - where the backup is and how to undo (`dotfiles-install restore`),
 - `dotfiles doctor` checks health; `dotfiles metrics` shows how the tools
   behave on their Mac,
+- what the install changed: run `dotfiles metrics --gains` now (time to
+  configured, before vs now), and again in about a week, when the automation
+  minutes have had time to add up. Share it with the owner if they ask,
+  for example in the install feedback issue,
 - if anything in the install was wrong or confusing, they can fix it and
   send it upstream from their own fork. Offer to do it with them: create a
   branch, make the fix, add or update a test (`tests/*.bats`) and the docs,
