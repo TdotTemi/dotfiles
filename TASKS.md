@@ -14,6 +14,15 @@ them. -->
 
 ## P2
 
+- [ ] Every dotfiles action runs through the CLI, agents, and the UI, with tests
+  - **ID**: action-parity
+  - **Details**: Follow the shared rule "Every action through CLI, agent, and UI, with tests" (reference: careerbrew `src/careerbrew/actions.py`, `careerbrew actions --json`, the Actions view, `tests/unit/test_action_parity.py`). Generate the action list from the CLI parser; expose `dotfiles actions --json` for agents and point `/dotfiles` at it; give the UI a generated form per action (terminal-only actions show their reason and command; hard-to-undo ones ask to confirm); add a parity test. If dotfiles has no UI, the parity test covers CLI and agents and says so.
+  - **Hypothesis**: one generated action list keeps the CLI, agents, and UI in step, so no action is reachable from only one of them.
+  - **Measurement**: the parity test's count of CLI commands missing an agent or UI path (or a written reason).
+  - **Success**: 0 missing, enforced in the repo's gate.
+  - **Pivot**: if generating from the parser is not possible in this stack, keep one registry file that both the CLI and the UI read, never two lists.
+  - **Anchor**: Hunt & Thomas 1999, The Pragmatic Programmer, "DRY: every piece of knowledge must have a single representation".
+
 - [ ] One command starts dotfiles: `dotfiles` in the shell, `/dotfiles` in an agent
   - **ID**: one-command-start
   - **Details**: Follow the shared rule "One command to start any app" (reference: careerbrew `careerbrew` / `/careerbrew` / `careerbrew config`). Running `dotfiles` with no arguments sets up what is missing, starts any long-running parts with sane defaults (reusing ones already running), refreshes, and prints what matters now and what it needs from the user. Ship `commands/dotfiles.md` and declare `commands: [./commands]` in `Agentfile.yaml`. Keep every default in one table; `dotfiles config` shows each value and its source, and `dotfiles config set <key> <value>` validates and saves it, so agents change settings the way people do.
