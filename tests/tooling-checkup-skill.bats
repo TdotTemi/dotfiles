@@ -152,6 +152,26 @@ make_tooling_root() {
   [[ "$output" == *"ship      worktree $(cd "$TOOLING" && pwd -P)/alpha-wt [feat/side] is clean"* ]]
 }
 
+@test "inventory labels draft pull requests so Phase 2 finishes their Pending list" {
+  make_tooling_root
+  git_q -C "$TOOLING/alpha" remote set-url origin https://github.com/acme/alpha.git
+  mkdir -p "$TEST_DIR/bin"
+  cat > "$TEST_DIR/bin/gh" <<'EOF2'
+#!/bin/sh
+case "$1" in
+  pr) printf '5\tfyodor\tfeat/ready\topen\tReady work\n6\tfyodor\twip/parked\tdraft\tParked work\n' ;;
+  *) exit 1 ;;
+esac
+EOF2
+  chmod +x "$TEST_DIR/bin/gh"
+
+  run env -u BASH_ENV -u ENV PATH="$TEST_DIR/bin:$PATH" TOOLING_ROOT="$TOOLING" TOOLING_CHECKUP_NO_FETCH=1 \
+    bash "$SCRIPTS/inventory.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ship      PR #5 feat/ready: Ready work"* ]]
+  [[ "$output" == *"ship      draft PR #6 wip/parked: Parked work (finish its ## Pending list)"* ]]
+}
+
 @test "inventory fails clearly when the tooling root has no checkouts" {
   mkdir -p "$TEST_DIR/empty"
   run env TOOLING_ROOT="$TEST_DIR/empty" bash "$SCRIPTS/inventory.sh"
@@ -558,4 +578,16 @@ broken file://$feeds/missing.xml"
   ! grep -q 'force-with-lease' "$SKILL_DIR/SKILL.md"
   # The fast path must not skip Phase 2 while a contributor PR is open.
   grep -F -q 'no open pull request of yours' "$SKILL_DIR/SKILL.md"
+}
+
+@test "tooling-checkup tries to finish open PRs on the owner's repos" {
+  grep -q '^### Open pull requests on your repos' "$SKILL_DIR/SKILL.md"
+  grep -F -q '`ship` on a `PR #N` line' "$SKILL_DIR/SKILL.md"
+  # A wrap-up draft continues from its Pending list.
+  grep -F -q '## Pending' "$SKILL_DIR/SKILL.md"
+  ! grep -q 'force-with-lease' "$SKILL_DIR/SKILL.md"
+  # Drafts are worked in a worktree; person-only items go to the questionnaire.
+  grep -F -q 'in a new worktree (never the live checkout)' "$SKILL_DIR/SKILL.md"
+  grep -F -q 'Phase 11' "$SKILL_DIR/SKILL.md"
+  grep -F -q 'gh pr ready <n>' "$SKILL_DIR/SKILL.md"
 }
