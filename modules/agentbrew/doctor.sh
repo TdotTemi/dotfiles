@@ -64,7 +64,15 @@ _agentbrew_plugin_layers_once() {
   rm -f "$errf"
 }
 
+# _agentbrew_global_agentfile_in_sync [--write]: succeeds when the global
+# Agentfile equals the merge apply would write. With --write (the --fix),
+# a drifted file is replaced by that merge (#299), and the apply-time sync
+# script (with its endpoint safe mode, mcpm, and hooks guards) then runs in
+# the background, one at a time (logs/agentbrew-sync-fix.log): a full sync
+# can take longer than the doctor's fix timeout.
 _agentbrew_global_agentfile_in_sync() {
+  local write=false
+  [ "${1:-}" = --write ] && write=true
   command -v agentbrew >/dev/null 2>&1 || return 0
   local merge_help
   merge_help="$(agentbrew agentfile merge --help 2>&1 || true)"
@@ -115,13 +123,33 @@ _agentbrew_global_agentfile_in_sync() {
   fi
   cmp -s "$expected" "$global_agentfile"
   status=$?
-  rm -f "$expected" "$layer"
+  rm -f "$layer"
+  if [ "$status" -ne 0 ] && $write; then
+    local log="$HOME/.local/share/dotfiles/logs/agentbrew-sync-fix.log" next
+    local lock="$HOME/.local/state/dotfiles/agentbrew-sync-fix.lock"
+    # Written next to the target, so the rename cannot leave half a file.
+    next="$(mktemp "$(dirname "$global_agentfile")/.Agentfile.yaml.XXXXXX")" &&
+      cat "$expected" > "$next" && chmod 644 "$next" && mv -f "$next" "$global_agentfile" || {
+      rm -f "$expected" "${next:-}"
+      return 1
+    }
+    rm -f "$expected"
+    mkdir -p "$(dirname "$log")" "$(dirname "$lock")"
+    # A lock left by a killed run is freed after an hour.
+    [ -z "$(find "$lock" -maxdepth 0 -mmin +60 2>/dev/null)" ] || rmdir "$lock" 2>/dev/null
+    if mkdir "$lock" 2>/dev/null; then
+      nohup bash -c 'trap "rmdir \"$1\"" EXIT; bash "$2"' _ "$lock" \
+        "$DOTFILES_DIR/.chezmoiscripts/run_after_agentbrew-sync.sh" >> "$log" 2>&1 < /dev/null &
+    fi
+    return 0
+  fi
+  rm -f "$expected"
   return "$status"
 }
 
 check "agentbrew.global_agentfile_in_sync" "global Agentfile matches dotfiles/overlay merge" \
   "_agentbrew_global_agentfile_in_sync" \
-  "bash '$DOTFILES_DIR/.chezmoiscripts/run_after_agentbrew-sync.sh'"
+  "bash '$DOTFILES_DIR/bin/dotfiles-agentfile-resync'"
 
 # This Mac's local Agentfile layer (lib/agentfile-layers.sh). A file with an
 # error is skipped by apply, so the drift check above still passes; this
