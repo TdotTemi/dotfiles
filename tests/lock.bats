@@ -309,6 +309,39 @@ EOF
   [[ "$output" != *Waiting* ]]
 }
 
+@test "a folder at the lock path is never acquired (ln would link inside it)" {
+  source "$LOCK_LIB"
+  mkdir -p "$DOTFILES_LOCK"
+  run acquire_lock "apply"
+  echo "$output"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"is a directory"* ]]
+  [ -z "$(ls -A "$DOTFILES_LOCK")" ]
+  SECONDS=0
+  run wait_for_lock "apply" 20
+  [ "$status" -eq 1 ]
+  [ "$SECONDS" -lt 5 ]
+  [ -z "$(ls -A "$DOTFILES_LOCK")" ]
+}
+
+@test "a symlink at the lock path is refused at once, also a broken one" {
+  source "$LOCK_LIB"
+  mkdir -p "$TEST_DIR/target"
+  ln -s "$TEST_DIR/target" "$DOTFILES_LOCK"
+  run acquire_lock "apply"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"is a symlink"* ]]
+  [ -z "$(ls -A "$TEST_DIR/target")" ]
+  rm -f "$DOTFILES_LOCK"
+  ln -s "$TEST_DIR/nowhere" "$DOTFILES_LOCK"
+  SECONDS=0
+  # perl's alarm stops an endless loop (no coreutils timeout needed).
+  run perl -e 'alarm 10; exec @ARGV' bash -c 'source "$1"; wait_for_lock apply 20' _ "$LOCK_LIB"
+  [ "$status" -eq 1 ]
+  [ "$SECONDS" -lt 5 ]
+  [[ "$output" == *"is a symlink"* ]]
+}
+
 @test "wait_for_lock prints nothing when the lock is free" {
   source "$LOCK_LIB"
   run wait_for_lock "apply" 5
