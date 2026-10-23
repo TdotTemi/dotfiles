@@ -44,19 +44,19 @@ them. -->
   - **Anchor**: tooling-checkup agent time review 2026-10-20; Forsgren, Humble, Kim 2018 (lead time); perf-review skill known fixes.
   - **Competitive-goal**: none — agent gate speed (docs/metrics.md gate row), not a scorecard metric.
 
-- [ ] Check whether a plugin's skills, commands, or agent definitions can shadow shared ones by name
-  - **ID**: plugin-name-shadowing
-  - **Tags**: plugins, agents, security
-  - **Details**: `agentfile_plugin_layers` (PR for plugin-exclude-agents-hooks, 2026-10-22) stops a plugin Agentfile from taking hooks, agents (`excludeAgents:`), or MCP servers from the shared layer. The list keys `skills:`, `sources:`, `commands:`, and `agents:` only add in agentbrew's merge, but a plugin source or folder can hold a skill, command, or agent definition with the same name as a shared one. Find out what `agentbrew sync` does on such a name clash (which file wins in `~/.claude/`), with a real sync in a scratch HOME. If the plugin's copy can win, refuse the plugin's clashing names the same way. Not covered either: plugin `rules:` text is appended after the shared rules and can contradict them (content, not structure), and `recommended: true` turns on the recommended MCP set (adds only).
-  - **Files**: `lib/agentfile-layers.sh`, `tests/plugin-agentfile-hooks.bats`, `docs/plugins.md`
+- [ ] Make `dotfiles plugin` commands take the shared dotfiles lock
+  - **ID**: plugin-commands-take-lock
+  - **Tags**: plugins, upgrade, locking
+  - **Details**: `bin/dotfiles-plugin` never sources `lib/lock.sh`, so `add`, `update`, `remove`, and `trust` run without `~/.dotfiles.lock`. `dotfiles upgrade` holds that lock while it runs `dotfiles plugin update --unattended` for each plugin (the Sunday job), and `dotfiles apply` holds it while it reads `plugins.lock` and the plugin folders. A manual plugin command at the same time can race them: two writers of `plugins.lock` (each `_lock_yq` write is atomic, but each read-modify-write is not), or a plugin folder swapped while apply reads it. The child that `dotfiles upgrade` starts must not wait on its parent's lock: `acquire_lock` sees a live owner and returns 1, so a plain `acquire_lock || exit 0` would skip every plugin update. Pass the held lock down (for example an env var with the holder's PID that `lib/lock.sh` accepts) or let `dotfiles upgrade` call the update code in-process. Found while closing plugin-name-shadowing (2026-10-22).
+  - **Files**: `bin/dotfiles-plugin`, `lib/lock.sh`, `bin/dotfiles-upgrade`, `tests/plugin-update.bats`, `tests/dotfiles-upgrade-plugins.bats`
   - **Output**: code
-  - **Acceptance**: a bats case with a scratch plugin that ships a skill named like a shared one shows which copy reaches `~/.claude/skills/`, and the shared copy wins or the plugin Agentfile is skipped.
-  - **Hypothesis**: refusing clashing names drops the ways a plugin can replace shared agent config from 1 (name clash, if agentbrew lets the later copy win) to 0.
-  - **Measurement**: the bats case above, with a real `agentbrew sync` into a scratch HOME (no network).
-  - **Success**: the shared skill, command, and agent files are unchanged after the sync.
-  - **Pivot**: if agentbrew already keeps the first copy, close this task with that evidence.
-  - **Anchor**: PR for plugin-exclude-agents-hooks, 2026-10-22; Saltzer and Schroeder 1975 (fail-safe defaults).
-  - **Competitive-goal**: none — plugin trust boundary, not a scorecard metric.
+  - **Acceptance**: with `~/.dotfiles.lock` held by a live dotfiles process, `dotfiles plugin update <name>` waits or exits with a message naming the holder and leaves `plugins.lock` unchanged, while `dotfiles upgrade` still updates its plugins.
+  - **Hypothesis**: plugin commands that can run during a held dotfiles lock drop from 4 (`add`, `update`, `remove`, `trust`) to 0, with the upgrade's own plugin step still working.
+  - **Measurement**: bats cases that hold the lock with a live scratch process and run each writing plugin command, plus the existing `tests/dotfiles-upgrade-plugins.bats` cases.
+  - **Success**: every writing plugin command refuses or waits under a held lock, and the upgrade plugin cases still pass.
+  - **Pivot**: if a shared lock makes the upgrade's plugin step skip or hang in any case, keep plugin commands lock-free and add a lock on `plugins.lock` writes only.
+  - **Anchor**: plugin-name-shadowing PR, 2026-10-22; `lib/lock.sh` (shared lock for apply, sync, doctor, upgrade).
+  - **Competitive-goal**: none — plugin state safety, not a scorecard metric.
 
 - [ ] Report an installed agent that agentbrew no longer syncs after an old `excludeAgents:`
   - **ID**: agent-detected-stale
@@ -73,6 +73,20 @@ them. -->
   - **Competitive-goal**: none — agent sync correctness, not a scorecard metric.
 
 ## P3
+
+- [ ] Say when a plugin's `rules:` text could contradict the shared rules
+  - **ID**: plugin-rules-contradiction
+  - **Tags**: plugins, agents, rules
+  - **Details**: `agentfile_plugin_layers` (`lib/agentfile-layers.sh`) stops a plugin Agentfile from taking hooks, agents, MCP servers, or command, agent, and skill names from the shared layer. It does not read `rules:` text: agentbrew appends a plugin's rules after the shared rules, so a plugin rule can say the opposite of a shared one (content, not structure). Carried over from the closed plugin-name-shadowing task (2026-10-22).
+  - **Files**: `lib/agentfile-layers.sh`, `modules/agentbrew/doctor.sh`, `docs/plugins.md`
+  - **Output**: decision
+  - **Acceptance**: a decision in `docs/plugins.md`: either a doctor advisory that lists each plugin's rule headings next to the shared ones, or a written reason why plugin rules stay unchecked.
+  - **Hypothesis**: listing plugin rule headings makes a contradicting plugin rule visible in 1 doctor run instead of never.
+  - **Measurement**: a bats case with a scratch plugin rule and `dotfiles doctor --module agentbrew`.
+  - **Success**: the plugin's rule headings show in the doctor output, or the decision is written down.
+  - **Pivot**: if headings say too little to judge, keep the decision and drop the advisory.
+  - **Anchor**: plugin-name-shadowing PR, 2026-10-22.
+  - **Competitive-goal**: none — plugin trust boundary, not a scorecard metric.
 
 - [ ] Make `make lint` fast in the inner loop
   - **ID**: speed-up-make-lint

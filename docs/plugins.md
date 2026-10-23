@@ -203,8 +203,60 @@ Only verified plugins contribute (`lib/plugin-extensions.sh`).
 | Settings (VS Code) | Deep merge, later wins: core default < plugin < user (`~/.config/dotfiles/settings/vscode.user.json`) < a plugin's `_force`. Conflicts show as doctor warnings. |
 | Shell | One generated loader (`~/.local/state/dotfiles/plugin-shell.zsh`), sourced by `home/zshrc` before `~/.zshrc.local`. Needs `shell_fragment: true`. |
 | Git hooks | The core pre-commit and pre-push run the plugin's `hooks/<name>` (declared in `capabilities.hooks`) after the leak gates, then the repo-local hook. |
-| Agentfile | `contributes.agentbrew/Agentfile.yaml` is merged into `~/.config/agentbrew/Agentfile.yaml` on apply, before `agentbrew sync`. It may add to the shared layer (hooks, MCP servers, skills), never take from it. Apply merges the earlier layers with and without the plugin (with the real agentbrew) and skips a plugin Agentfile that would replace or weaken a shared hook (an earlier hook entry, compared whole, is gone, or a second copy of a shared hook command appears for the same event, under any matcher), list an agent in `excludeAgents:` (that turns off all agentbrew sync for the agent, the shared hooks included), re-define a shared MCP server under its name, or set `recommended: true` (that installs the whole recommended set). Without `agentfile merge` (older agentbrew), a stricter rule is read from the files: any `hooks:`, `excludeAgents:`, or `recommended: true`, a file that is not one map or uses a YAML merge key (`<<`), or an entry for a shared MCP server that is not written the same way skips it. The one exception: `defaultModel`, `defaultEffort`, and `modelOverrides` may change, because an overlay sets them on purpose ([model-configuration.md](model-configuration.md)). The doctor check `agentbrew.plugin_agentfile_shared` finds agentbrew the way apply does (PATH, then the checkout's `dist/cli.js`, then its `tsx`) and names the plugin and what it would take. Give a plugin hook its own command and a plugin MCP server its own name; to keep people off an agent, use `blocked_software`. |
+| Agentfile | `contributes.agentbrew/Agentfile.yaml` is merged into `~/.config/agentbrew/Agentfile.yaml` on apply, before `agentbrew sync`. It may add to the shared layer (hooks, MCP servers, skills), never take from it: see [Agentfile rules](#agentfile-rules). |
 | Blocked software | `apps`, `casks`, `formulae` lists; the doctor check `plugins.<name>.blocked_software` fails while any is installed. |
+
+### Agentfile rules
+
+Apply merges the earlier layers (the shared Agentfile, then each plugin kept
+so far) with and without the plugin, using the real agentbrew. It skips the
+plugin's Agentfile, and says why, when the plugin would:
+
+- **Replace or weaken a shared hook.** An earlier hook entry (compared
+  whole) is gone, or a second copy of a shared hook command appears for the
+  same event, under any matcher.
+- **Turn off an agent.** `excludeAgents:` turns off all agentbrew sync for
+  that agent, the shared hooks included.
+- **Re-define a shared MCP server** under its name.
+- **Set `recommended: true`.** That installs the whole recommended set.
+- **Ship a command or agent with a shared name.** A `commands:` or
+  `agents:` folder holds a `*.md` file named like one in a shared folder of
+  that kind, in any letter case. For an agent, its front matter `name:`
+  counts too. agentbrew keeps one file per name, and which copy wins
+  depends on the order the folders first reached it, so the plugin's copy
+  could replace the shared one. A name with non-ASCII letters cannot be
+  compared, so it is refused too.
+- **Make a local skill copy match a `skills:` entry.** A local `sources:`
+  folder (of this plugin or an earlier one) holds a skill (`SKILL.md`,
+  `skill.md`, or `DESIGN.md`, by folder name or front matter `name:`) that a
+  `skills:` entry without a catalog entry asks for, and it did not match
+  before this plugin; or a
+  source the plugin adds holds a second copy of such a skill (agentbrew
+  would then ask which source to use).
+  agentbrew installs a `skills:` name that has no catalog entry (a built-in
+  skill) by searching every source, and a local source ranks before the
+  built-in. A name only the plugin asks for counts when it is an agentbrew
+  built-in, because agentbrew installs no other unknown name; when the
+  built-in list cannot be found (no `AGENTBREW_DIR`, no agentbrew
+  `dist/cli.js`, no checkout), every such name counts. A remote
+  source cannot be read before the sync, so this rule does not cover it.
+
+Without `agentfile merge` (older agentbrew), a stricter rule is read from
+the files: any `hooks:`, `excludeAgents:`, or `recommended: true`, a file
+that is not one map or uses a YAML merge key (`<<`), an entry for a shared
+MCP server that is not written the same way, or a command, agent, or skill
+name as above (folders as agentbrew reads them when it applies the file on
+its own) skips it.
+
+The one exception: `defaultModel`, `defaultEffort`, and `modelOverrides`
+may change, because an overlay sets them on purpose
+([model-configuration.md](model-configuration.md)).
+
+The doctor check `agentbrew.plugin_agentfile_shared` finds agentbrew the way
+apply does (PATH, then the checkout's `dist/cli.js`, then its `tsx`) and
+names the plugin and what it would take. Give a plugin hook its own command,
+and a plugin MCP server, command, agent, or skill its own name. To keep
+people off an agent, use `blocked_software`.
 
 ## Core options
 
