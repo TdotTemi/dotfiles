@@ -1,0 +1,37 @@
+#!/bin/bash
+# Say once a day that background updates landed and the checkup should run
+# (#301). Reads the record that tooling-sync and dotfiles-upgrade write
+# (lib/updates-landed.sh). Prints nothing when nothing new landed.
+#
+# Usage: dotfiles-updates-landed           one line, at most once a day
+#        dotfiles-updates-landed --always  the line every time (no daily limit)
+#        dotfiles-updates-landed --ack     mark everything so far as seen (the checkup runs this)
+
+set -uo pipefail
+{ [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; } && { sed -n '/^#!/d; /^$/q; /^[^#]/q; s/^# \{0,1\}//p' "$0"; exit 0; }
+
+# shellcheck source=../lib/updates-landed.sh
+source "$(cd "$(dirname "$0")/.." && pwd)/lib/updates-landed.sh"
+file="$(updates_landed_file)"
+ack="$file.ack"
+shown="$file.shown"
+
+# The ack holds the time of the newest line seen; lines after it are new.
+# (A line count would break once the record is trimmed to 100 lines.)
+if [ "${1:-}" = --ack ]; then
+  mkdir -p "$(dirname "$ack")"
+  if [ -f "$file" ]; then tail -n 1 "$file" | cut -f1 > "$ack"; else : > "$ack"; fi
+  exit 0
+fi
+
+[ -f "$file" ] || exit 0
+since="$(cat "$ack" 2>/dev/null || true)"
+newlines="$(awk -F '\t' -v since="$since" '$1 > since' "$file")"
+[ -n "$newlines" ] || exit 0
+new="$(printf '%s\n' "$newlines" | grep -c .)"
+today="$(date +%Y-%m-%d)"
+if [ "${1:-}" != --always ] && [ "$(cat "$shown" 2>/dev/null)" = "$today" ]; then exit 0; fi
+sources="$(printf '%s\n' "$newlines" | cut -f2 | sort -u | paste -sd ',' - | sed 's/,/, /g')"
+echo "$new update(s) landed since the last checkup ($sources): run the tooling-checkup to see what changed."
+[ "${1:-}" = --always ] || printf '%s\n' "$today" > "$shown"
+exit 0
