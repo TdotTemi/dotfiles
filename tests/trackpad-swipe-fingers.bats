@@ -27,15 +27,15 @@ teardown() {
   [ ! -s "$DEFAULTS_LOG" ]
 }
 
-@test "trackpad_swipe_fingers=3 turns drag off and moves swipes to 3 fingers on both trackpads" {
+@test "trackpad_swipe_fingers=3 turns drag off and turns on 3- and 4-finger swipes on both trackpads" {
   DOTFILES_TRACKPAD_SWIPE_FINGERS=3 run bash "$SCRIPT"
   [ "$status" -eq 0 ]
   for d in com.apple.AppleMultitouchTrackpad com.apple.driver.AppleBluetoothMultitouch.trackpad; do
     grep -qx "write $d TrackpadThreeFingerDrag -bool false" "$DEFAULTS_LOG"
     grep -qx "write $d TrackpadThreeFingerHorizSwipeGesture -int 2" "$DEFAULTS_LOG"
     grep -qx "write $d TrackpadThreeFingerVertSwipeGesture -int 2" "$DEFAULTS_LOG"
-    grep -qx "write $d TrackpadFourFingerHorizSwipeGesture -int 0" "$DEFAULTS_LOG"
-    grep -qx "write $d TrackpadFourFingerVertSwipeGesture -int 0" "$DEFAULTS_LOG"
+    grep -qx "write $d TrackpadFourFingerHorizSwipeGesture -int 2" "$DEFAULTS_LOG"
+    grep -qx "write $d TrackpadFourFingerVertSwipeGesture -int 2" "$DEFAULTS_LOG"
   done
 }
 
