@@ -667,16 +667,19 @@ if [ -d "$_uv_python_root" ]; then
     "'$DOTFILES_DIR/bin/dotfiles-adhoc-sign-uv-pythons'  # com.dotfiles.endpoint-bootstrap runs at login"
 fi
 
-_adhoc_sign_uv_la="$HOME/Library/LaunchAgents/com.dotfiles.endpoint-bootstrap.plist"
-check "security.endpoint_bootstrap_la" "Login endpoint-bootstrap LaunchAgent installed (jq + uv sign before minsky RunAtLoad)" \
-  "[ -f '$_adhoc_sign_uv_la' ]" \
-  "chezmoi apply  # launchagents/com.dotfiles.endpoint-bootstrap.plist.tmpl"
-check_advisory "security.endpoint_bootstrap_sentinel" "endpoint-bootstrap ready sentinel present after login" \
-  "[ -f \"\$HOME/.local/state/dotfiles/endpoint-ready\" ]" \
-  "launchctl kickstart -k gui/\$(id -u)/com.dotfiles.endpoint-bootstrap  # or: dotfiles-adhoc-sign-jq && dotfiles-link-jq-shim"
-check_advisory "security.endpoint_bootstrap_before_minsky" "endpoint-bootstrap label sorts before com.minsky.* (launchd RunAtLoad hint)" \
-  "printf '%s\\n' 'com.dotfiles.endpoint-bootstrap' 'com.minsky.tick-loop' | LC_ALL=C sort | head -1 | grep -qx 'com.dotfiles.endpoint-bootstrap'" \
-  "chezmoi apply  # com.dotfiles.endpoint-bootstrap replaces com.dotfiles.adhoc-sign-uv-pythons"
+# Apply installs endpoint-bootstrap only with endpoint_hardening on.
+if [ "${ENDPOINT_HARDENING:-true}" = "true" ]; then
+  _adhoc_sign_uv_la="$HOME/Library/LaunchAgents/com.dotfiles.endpoint-bootstrap.plist"
+  check "security.endpoint_bootstrap_la" "Login endpoint-bootstrap LaunchAgent installed (jq + uv sign before minsky RunAtLoad)" \
+    "[ -f '$_adhoc_sign_uv_la' ]" \
+    "chezmoi apply  # launchagents/com.dotfiles.endpoint-bootstrap.plist.tmpl"
+  check_advisory "security.endpoint_bootstrap_sentinel" "endpoint-bootstrap ready sentinel present after login" \
+    "[ -f \"\$HOME/.local/state/dotfiles/endpoint-ready\" ]" \
+    "launchctl kickstart -k gui/\$(id -u)/com.dotfiles.endpoint-bootstrap  # or: dotfiles-adhoc-sign-jq && dotfiles-link-jq-shim"
+  check_advisory "security.endpoint_bootstrap_before_minsky" "endpoint-bootstrap label sorts before com.minsky.* (launchd RunAtLoad hint)" \
+    "printf '%s\\n' 'com.dotfiles.endpoint-bootstrap' 'com.minsky.tick-loop' | LC_ALL=C sort | head -1 | grep -qx 'com.dotfiles.endpoint-bootstrap'" \
+    "chezmoi apply  # com.dotfiles.endpoint-bootstrap replaces com.dotfiles.adhoc-sign-uv-pythons"
+fi
 
 # LaunchAgent plists with explicit PATH must prepend dotfiles shims (see .chezmoitemplates/launchagent-path).
 if [ -d "$DOTFILES_DIR/launchagents" ]; then
