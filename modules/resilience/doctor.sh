@@ -28,9 +28,13 @@ check "resilience.sleepwatcher_binary" "sleepwatcher binary present" \
   "[ -x /opt/homebrew/sbin/sleepwatcher ] || [ -x /usr/local/sbin/sleepwatcher ]" \
   "echo 'Install: brew install sleepwatcher'"
 
-check "resilience.sleepwatcher_loaded" "sleepwatcher LaunchAgent loaded" \
-  "launchctl list 2>/dev/null | grep -q com.dotfiles.sleepwatcher" \
-  "echo 'Load: launchctl bootstrap gui/\$UID ~/Library/LaunchAgents/com.dotfiles.sleepwatcher.plist'"
+# keep_awake_tools (default: full profile) decides whether apply loads the
+# agent, so the doctor expects it only then.
+if [ "${KEEP_AWAKE_TOOLS:-true}" = "true" ]; then
+  check "resilience.sleepwatcher_loaded" "sleepwatcher LaunchAgent loaded" \
+    "launchctl list 2>/dev/null | grep -q com.dotfiles.sleepwatcher" \
+    "echo 'Load: launchctl bootstrap gui/\$UID ~/Library/LaunchAgents/com.dotfiles.sleepwatcher.plist'"
+fi
 
 check "resilience.wakeup_hook_exists" '$HOME/.wakeup hook fires network-watchdog' \
   "[ -f \"\$HOME/.wakeup\" ] && grep -q 'network-watchdog' \"\$HOME/.wakeup\"" \
@@ -62,9 +66,11 @@ check "resilience.mas_installed" "mas (App Store CLI) installed" \
 # so we don't try to auto-install. The setup wizard
 # (dotfiles-resilience-setup) opens the App Store page and prints
 # trigger config instructions on first run.
-check "resilience.amphetamine_installed" "Amphetamine.app installed (lid-close persistence)" \
-  "[ -d /Applications/Amphetamine.app ]" \
-  "echo 'Run: dotfiles-resilience-setup (will open App Store + print config steps)'"
+if [ "${KEEP_AWAKE_TOOLS:-true}" = "true" ]; then
+  check "resilience.amphetamine_installed" "Amphetamine.app installed (lid-close persistence)" \
+    "[ -d /Applications/Amphetamine.app ]" \
+    "echo 'Run: dotfiles-resilience-setup (will open App Store + print config steps)'"
+fi
 
 # A stale manual Single-Use session can survive for days, continuously
 # preventing system sleep (and, depending on its setting, display sleep).

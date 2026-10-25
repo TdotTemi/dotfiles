@@ -91,6 +91,10 @@ settings:
     type: bool
     default: "@use_local_ai|owner_machine"
     description: Load the local-AI LaunchAgents (opencode serve, Ollama, model warmup).
+  keep_awake_tools:
+    type: bool
+    default: derived
+    description: Load the sleepwatcher LaunchAgent and check Amphetamine (lid-close persistence). Derived from the profile (true on full); set true to opt in on core.
   use_encryption:
     type: bool
     default: false

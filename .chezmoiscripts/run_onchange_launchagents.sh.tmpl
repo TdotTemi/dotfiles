@@ -18,6 +18,7 @@ AUTO_SYNC="{{ dig "auto_sync" true . }}"
 CLAUDE_REMOTE_CONTROL="{{ dig "claude_remote_control" false . }}"
 IS_ENTERPRISE="{{ dig "is_enterprise" false . }}"
 # local_ai_agents: use_local_ai or owner_machine unless set (see .chezmoi.yaml.tmpl).
+KEEP_AWAKE_TOOLS="{{ dig "keep_awake_tools" (eq .profile "full") . }}"
 LOCAL_AI_AGENTS="{{ dig "local_ai_agents" (or (dig "use_local_ai" false .) (dig "owner_machine" false .)) . }}"
 ENDPOINT_HARDENING="{{ dig "endpoint_hardening" true . }}"
 # capslock_control: owner_machine unless set (see .chezmoi.yaml.tmpl).
@@ -103,7 +104,7 @@ should_skip_agent() {
     mcp-memory|mcp-memory-maintain)
       return 0 ;;
     sleepwatcher)
-      [ "$PROFILE" != "full" ] && return 0
+      [ "${KEEP_AWAKE_TOOLS:-false}" != "true" ] && return 0
       ! command -v sleepwatcher &>/dev/null && return 0 ;;
     rancher-desktop)
       ! [ -d "/Applications/Rancher Desktop.app" ] && return 0 ;;

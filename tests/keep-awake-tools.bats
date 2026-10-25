@@ -1,0 +1,41 @@
+#!/usr/bin/env bats
+# keep_awake_tools decides whether apply loads sleepwatcher and whether the
+# doctor checks it and Amphetamine. Default: the full profile only.
+
+load test_helper
+
+TMPL="$BATS_TEST_DIRNAME/../.chezmoiscripts/run_onchange_launchagents.sh.tmpl"
+
+setup() {
+  eval "$(sed -n '/^should_skip_agent() {/,/^}/p' "$TMPL")"
+}
+
+@test "keep_awake_tools=true loads sleepwatcher on any profile" {
+  PROFILE=core KEEP_AWAKE_TOOLS=true
+  command() { [ "$2" = "sleepwatcher" ] && return 0; builtin command "$@"; }
+  run should_skip_agent sleepwatcher
+  [ "$status" -eq 1 ]
+}
+
+@test "keep_awake_tools=false skips sleepwatcher, even on full" {
+  PROFILE=full KEEP_AWAKE_TOOLS=false
+  run should_skip_agent sleepwatcher
+  [ "$status" -eq 0 ]
+}
+
+@test "launchagents template defaults keep_awake_tools to the full profile" {
+  grep -q 'KEEP_AWAKE_TOOLS="{{ dig "keep_awake_tools" (eq .profile "full") . }}"' "$TMPL"
+  grep -q 'KEEP_AWAKE_TOOLS="${DOTFILES_KEEP_AWAKE_TOOLS:-$(chezmoi execute-template '"'"'{{ dig "keep_awake_tools" (eq .profile "full") . }}'"'"'' "$BATS_TEST_DIRNAME/../bin/dotfiles-doctor"
+}
+
+@test "chezmoi config keeps keep_awake_tools across chezmoi init" {
+  grep -q 'hasKey . "keep_awake_tools"' "$BATS_TEST_DIRNAME/../.chezmoi.yaml.tmpl"
+  grep -q '^  keep_awake_tools: {{ \$keepAwakeTools }}' "$BATS_TEST_DIRNAME/../.chezmoi.yaml.tmpl"
+}
+
+@test "doctor checks sleepwatcher and Amphetamine only when keep_awake_tools is on" {
+  DOCTOR="$BATS_TEST_DIRNAME/../modules/resilience/doctor.sh"
+  [ "$(grep -c 'if \[ "${KEEP_AWAKE_TOOLS:-true}" = "true" \]; then' "$DOCTOR")" -eq 2 ]
+  grep -B4 'resilience.sleepwatcher_loaded' "$DOCTOR" | grep -q KEEP_AWAKE_TOOLS
+  grep -B2 'resilience.amphetamine_installed' "$DOCTOR" | grep -q KEEP_AWAKE_TOOLS
+}
