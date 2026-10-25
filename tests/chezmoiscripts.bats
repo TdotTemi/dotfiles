@@ -742,7 +742,7 @@ CONFIG
   grep -q 'sha256sum' "$TEST_DOTFILES/.chezmoiscripts/run_onchange_macos.sh.tmpl"
   local hash_count
   hash_count=$(grep -c 'sha256sum' "$TEST_DOTFILES/.chezmoiscripts/run_onchange_macos.sh.tmpl")
-  [ "$hash_count" -eq 4 ]
+  [ "$hash_count" -eq 5 ]
 }
 
 # ── run_onchange_launchagents.sh.tmpl ────────────────────────────
