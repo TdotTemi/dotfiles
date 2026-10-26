@@ -28,9 +28,13 @@ check "resilience.sleepwatcher_binary" "sleepwatcher binary present" \
   "[ -x /opt/homebrew/sbin/sleepwatcher ] || [ -x /usr/local/sbin/sleepwatcher ]" \
   "echo 'Install: brew install sleepwatcher'"
 
-check "resilience.sleepwatcher_loaded" "sleepwatcher LaunchAgent loaded" \
-  "launchctl list 2>/dev/null | grep -q com.dotfiles.sleepwatcher" \
-  "echo 'Load: launchctl bootstrap gui/\$UID ~/Library/LaunchAgents/com.dotfiles.sleepwatcher.plist'"
+# keep_awake_tools (default: full profile) decides whether apply loads the
+# agent, so the doctor expects it only then.
+if [ "${KEEP_AWAKE_TOOLS:-true}" = "true" ]; then
+  check "resilience.sleepwatcher_loaded" "sleepwatcher LaunchAgent loaded" \
+    "launchctl list 2>/dev/null | grep -q com.dotfiles.sleepwatcher" \
+    "echo 'Load: launchctl bootstrap gui/\$UID ~/Library/LaunchAgents/com.dotfiles.sleepwatcher.plist'"
+fi
 
 check "resilience.wakeup_hook_exists" '$HOME/.wakeup hook fires network-watchdog' \
   "[ -f \"\$HOME/.wakeup\" ] && grep -q 'network-watchdog' \"\$HOME/.wakeup\"" \
@@ -62,9 +66,11 @@ check "resilience.mas_installed" "mas (App Store CLI) installed" \
 # so we don't try to auto-install. The setup wizard
 # (dotfiles-resilience-setup) opens the App Store page and prints
 # trigger config instructions on first run.
-check "resilience.amphetamine_installed" "Amphetamine.app installed (lid-close persistence)" \
-  "[ -d /Applications/Amphetamine.app ]" \
-  "echo 'Run: dotfiles-resilience-setup (will open App Store + print config steps)'"
+if [ "${KEEP_AWAKE_TOOLS:-true}" = "true" ]; then
+  check "resilience.amphetamine_installed" "Amphetamine.app installed (lid-close persistence)" \
+    "[ -d /Applications/Amphetamine.app ]" \
+    "echo 'Run: dotfiles-resilience-setup (will open App Store + print config steps)'"
+fi
 
 # A stale manual Single-Use session can survive for days, continuously
 # preventing system sleep (and, depending on its setting, display sleep).
@@ -192,12 +198,12 @@ check "resilience.agent_wake_recover_script" "dotfiles-agent-wake-recover execut
   "[ -x \"\$DOTFILES_DIR/bin/dotfiles-agent-wake-recover\" ]" \
   "chmod +x \"\$DOTFILES_DIR/bin/dotfiles-agent-wake-recover\""
 
-check "resilience.agent_keepawake_loaded" "agent-keepawake LaunchAgent loaded (full + Claude Code)" \
-  "[ \"\${DOTFILES_PROFILE:-full}\" != full ] || { [ ! -x \"\$HOME/.local/bin/claude\" ] && ! dotfiles_agent_desktop_claude_installed; } || launchctl print \"gui/\$(id -u)/com.dotfiles.agent-keepawake\" >/dev/null 2>&1" \
+check "resilience.agent_keepawake_loaded" "agent-keepawake LaunchAgent loaded (keep_awake_tools + Claude Code)" \
+  "[ \"\${KEEP_AWAKE_TOOLS:-true}\" != true ] || { [ ! -x \"\$HOME/.local/bin/claude\" ] && ! dotfiles_agent_desktop_claude_installed; } || launchctl print \"gui/\$(id -u)/com.dotfiles.agent-keepawake\" >/dev/null 2>&1" \
   "launchctl bootstrap gui/\$UID \"\$HOME/Library/LaunchAgents/com.dotfiles.agent-keepawake.plist\" 2>/dev/null || dotfiles apply"
 
 check "resilience.agent_keepawake_battery_policy" "agent keepawake covers AC and battery at or above 20%" \
-  "[ \"\${DOTFILES_PROFILE:-full}\" != full ] || { [ ! -x \"\$HOME/.local/bin/claude\" ] && ! dotfiles_agent_desktop_claude_installed; } || _agent_keepawake_battery_policy_configured" \
+  "[ \"\${KEEP_AWAKE_TOOLS:-true}\" != true ] || { [ ! -x \"\$HOME/.local/bin/claude\" ] && ! dotfiles_agent_desktop_claude_installed; } || _agent_keepawake_battery_policy_configured" \
   "dotfiles apply && launchctl kickstart -k gui/\$UID/com.dotfiles.agent-keepawake"
 
 check_advisory "resilience.agent_keepawake_lid_closed_automation" "Amphetamine Automation is ready for lid-closed agent work" \
