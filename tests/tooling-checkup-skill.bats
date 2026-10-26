@@ -100,6 +100,14 @@ make_tooling_root() {
   grep -F -q 'make changelog' "$SKILL_DIR/reference/monthly-repo-health.md"
 }
 
+@test "tooling-checkup config hygiene covers duplicates, memory, hooks, and new skills" {
+  grep -F -q 'reference/config-hygiene.md' "$SKILL"
+  grep -F -q '## One home per fact' "$SKILL_DIR/reference/config-hygiene.md"
+  grep -F -q '## Memory hygiene' "$SKILL_DIR/reference/config-hygiene.md"
+  grep -F -q '## Hooks' "$SKILL_DIR/reference/config-hygiene.md"
+  grep -F -q '## New upstream skills' "$SKILL_DIR/reference/config-hygiene.md"
+}
+
 @test "tooling-checkup reference links resolve one level deep" {
   local link
   for link in $(grep -o '](reference/[^)]*)' "$SKILL" | sed 's/^](//; s/)$//'); do
