@@ -24,7 +24,7 @@ solve one task, reference lists facts, explanation gives the reasons.
 | [adoption-checklist.md](adoption-checklist.md) | What must a team lead do before a rollout? | human |
 | [team-onboarding.md](team-onboarding.md) | How do I roll this out to a team? | human |
 | [ci-setup.md](ci-setup.md) | How do I run the checks in CI for a team fork? | human |
-| [multi-machine.md](multi-machine.md) | How do I keep several Macs in sync? | human |
+| [multi-machine.md](multi-machine.md) | How do I keep several Macs in sync, and move my personal agent files? | human |
 | [key-rotation.md](key-rotation.md) | How do I rotate SSH and API keys? | human |
 | [agentbrew-setup.md](agentbrew-setup.md) | How do I set up or repair agentbrew on this Mac? | both |
 | [local-llm.md](local-llm.md) | How do I run the local-LLM stack? | both |
