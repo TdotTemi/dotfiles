@@ -95,7 +95,11 @@ if [ -x /opt/homebrew/sbin/sleepwatcher ] || [ -x /usr/local/sbin/sleepwatcher ]
 else
   err "sleepwatcher not found — install: brew install sleepwatcher"
 fi
-if launchctl list | grep -q com.dotfiles.sleepwatcher; then
+# keep_awake_tools: same default as bin/dotfiles-doctor; apply loads the agent only then.
+KEEP_AWAKE_TOOLS="${DOTFILES_KEEP_AWAKE_TOOLS:-$(chezmoi execute-template '{{ dig "keep_awake_tools" (eq .profile "full") . }}' 2>/dev/null || echo "true")}"
+if [ "$KEEP_AWAKE_TOOLS" != "true" ]; then
+  hint "sleepwatcher LaunchAgent off (keep_awake_tools is false)"
+elif launchctl list | grep -q com.dotfiles.sleepwatcher; then
   ok "sleepwatcher LaunchAgent loaded"
 else
   warn "sleepwatcher LaunchAgent not loaded"

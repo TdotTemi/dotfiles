@@ -39,3 +39,22 @@ setup() {
   grep -B4 'resilience.sleepwatcher_loaded' "$DOCTOR" | grep -q KEEP_AWAKE_TOOLS
   grep -B2 'resilience.amphetamine_installed' "$DOCTOR" | grep -q KEEP_AWAKE_TOOLS
 }
+
+# Run only the sleepwatcher LaunchAgent block of the wizard, with stubs, so
+# the test never installs anything or opens the App Store.
+_setup_sleepwatcher_block() {
+  local block
+  block="$(sed -n '/^# keep_awake_tools: same default as bin\/dotfiles-doctor/,/^fi$/p' "$BATS_TEST_DIRNAME/../bin/dotfiles-resilience-setup")"
+  ( DOTFILES_KEEP_AWAKE_TOOLS="$1"
+    ok() { echo "ok: $*"; }; warn() { echo "warn: $*"; }; hint() { echo "hint: $*"; }
+    launchctl() { echo "PID Status Label"; }
+    eval "$block" )
+}
+
+@test "resilience setup does not warn about sleepwatcher when keep_awake_tools is off" {
+  run _setup_sleepwatcher_block false
+  [[ "$output" != *"not loaded"* ]]
+  [[ "$output" == *"keep_awake_tools is false"* ]]
+  run _setup_sleepwatcher_block true
+  [[ "$output" == *"warn: sleepwatcher LaunchAgent not loaded"* ]]
+}
