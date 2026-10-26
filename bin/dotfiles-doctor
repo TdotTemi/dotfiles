@@ -78,7 +78,7 @@ LOCAL_AI_AGENTS="${DOTFILES_LOCAL_AI_AGENTS:-$(chezmoi execute-template '{{ dig 
 
 # shellcheck disable=SC2034  # used by sourced doctor modules
 # gh_admin_scopes: same default as .chezmoi.yaml.tmpl.
-GH_ADMIN_SCOPES="${DOTFILES_GH_ADMIN_SCOPES:-$(chezmoi execute-template '{{ dig "gh_admin_scopes" (dig "owner_machine" true .) . }}' 2>/dev/null || echo "true")}"
+GH_ADMIN_SCOPES="${DOTFILES_GH_ADMIN_SCOPES:-$(chezmoi execute-template '{{ dig "gh_admin_scopes" (dig "owner_machine" true .) . }}' 2>/dev/null || echo "false")}"
 
 # ── Module discovery roots ───────────────────────────────────────────
 # Core modules live under "$DOTFILES_DIR/modules/". Company plugins add
