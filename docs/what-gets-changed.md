@@ -83,7 +83,7 @@ To keep one of your own settings, list it in `~/.config/dotfiles/macos-defaults-
 |---|---|---|
 | Hot corners | 8 | Top-right: Mission Control, bottom-left: Start Screen Saver, bottom-right: Desktop |
 | Dock appearance | 6 | Auto-hide, 44px tiles, magnification to 56px, hide recents, hide indicators |
-| Trackpad | 5 | Speed 3.0, tap to click, three-finger drag |
+| Trackpad | 5 | Speed 3.0, tap to click, three-finger drag (`trackpad_swipe_fingers: 3` turns drag off and moves desktop and Mission Control swipes to 3 fingers, on every profile) |
 | Finder sidebar | 3 | 180px sidebar, show desktop icons |
 | Font rendering | 3 | No subpixel AA (Retina), reduce desktop tinting, scrollbars when scrolling |
 | Accessibility | 2 | Reduce transparency, reduce motion |

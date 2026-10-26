@@ -131,6 +131,13 @@
 {{- if hasKey . "keep_awake_tools" -}}
 {{-   $keepAwakeTools = .keep_awake_tools -}}
 {{- end -}}
+{{/* trackpad_swipe_fingers: 3 or 4 fingers for swipes between desktops
+     and Mission Control (macos-trackpad.sh). 3 also turns three-finger drag
+     off. Default 4, which changes nothing. */ -}}
+{{- $trackpadSwipeFingers := 4 -}}
+{{- if hasKey . "trackpad_swipe_fingers" -}}
+{{-   $trackpadSwipeFingers = .trackpad_swipe_fingers -}}
+{{- end -}}
 {{/* local_ai_agents loads the local-AI LaunchAgents (opencode serve on
      :4096, Ollama, model warmup) and runs the local-ai doctor module, whose
      fixes install opencode. Default: use_local_ai or owner_machine, so a new
@@ -176,6 +183,7 @@ data:
   owner_machine: {{ $ownerMachine }}
   endpoint_hardening: {{ $endpointHardening }}
   capslock_control: {{ $capslockControl }}
+  trackpad_swipe_fingers: {{ $trackpadSwipeFingers }}
   global_git_hooks: {{ $globalGitHooks }}
   claude_remote_control: {{ $claudeRemoteControl }}
   weekly_metrics: {{ $weeklyMetrics }}

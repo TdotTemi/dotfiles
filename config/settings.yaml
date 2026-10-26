@@ -67,6 +67,10 @@ settings:
     type: bool
     default: "@owner_machine"
     description: Map Caps Lock to Control (com.dotfiles.capslock-control LaunchAgent).
+  trackpad_swipe_fingers:
+    type: int
+    default: 4
+    description: Fingers for trackpad swipes between desktops and Mission Control (3 or 4). 3 also turns three-finger drag off.
   global_git_hooks:
     type: bool
     default: true
