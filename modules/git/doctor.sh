@@ -173,13 +173,16 @@ if command -v gh &>/dev/null; then
   check "git.gh_protocol"       "gh CLI uses SSH protocol"    "[ \"\$(gh config get git_protocol 2>/dev/null)\" = 'ssh' ]"    "gh config set git_protocol ssh 2>/dev/null"
   check "git.gh_auth" "gh authenticated to github.com" \
     "gh auth status -h github.com &>/dev/null"
-  # Required scopes: repo, gist, read:org, workflow, admin:public_key, delete_repo
-  # Re-add missing scopes: gh auth refresh -h github.com -s delete_repo
-  for _scope in repo gist read:org workflow admin:public_key delete_repo; do
+  # Required scopes: repo, gist, read:org; plus workflow, admin:public_key and
+  # delete_repo when gh_admin_scopes is on (default: owner_machine).
+  # Re-add a missing scope: gh auth refresh -h github.com -s <scope>
+  _scopes="repo gist read:org"
+  [ "${GH_ADMIN_SCOPES:-false}" = "true" ] && _scopes="$_scopes workflow admin:public_key delete_repo"
+  for _scope in $_scopes; do
     check "git.gh_scope.$_scope" "gh token has $_scope scope" \
       "gh auth status -h github.com 2>&1 | grep -q '$_scope'"
   done
-  unset _scope
+  unset _scope _scopes
 fi
 
 # ── Enterprise hooks ─────────────────────────────────────────────────

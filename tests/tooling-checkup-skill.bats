@@ -762,11 +762,17 @@ broken file://$feeds/missing.xml"
   grep -q "\[ -d \"\$NP\" \] || NP=" "$SKILL"
 }
 
-@test "tooling-checkup ends with a published HTML report, then asks from it" {
+@test "tooling-checkup ends with a local HTML page and one in-place dashboard, then asks" {
   local skill="$BATS_TEST_DIRNAME/../skills/tooling-checkup/SKILL.md"
-  grep -q "The report is one self-contained HTML page, not chat text" "$skill"
-  grep -q "publish it as a private Artifact" "$skill"
+  grep -q "one local HTML page for this run, and one shared tooling health" "$skill"
+  grep -q "Never publish a new page per run" "$skill"
+  grep -q "dashboard_export.py" "$skill"
+  grep -q "dashboard-url" "$skill"
   grep -q "Ask from the page" "$skill"
+  [ -f "$SKILL_DIR/dashboard/index.html" ]
+  [ -f "$SKILL_DIR/reference/dashboard.md" ]
+  run jq -e '[.evals[] | select(.prompt | contains("dashboard-url"))] | length >= 1' "$EVALS"
+  [ "$status" -eq 0 ]
 }
 
 @test "tooling-checkup times the skip-when-unchanged apply and reports drift" {
@@ -915,4 +921,154 @@ compatibility: $(printf 'x%.0s' $(seq 501))"
   [[ "$output" == *"S003"*"spec: name"* ]]
   [[ "$output" == *"S010"*"ours"* ]]
   grep -q 'agentskills.io/specification' "$SKILL_DIR/reference/config-audit.md"
+}
+
+@test "state record appends history and backfills the run recorded before it" {
+  local bin="$TEST_DIR/bin"
+  mkdir -p "$bin" "$TEST_DIR/state"
+  printf '#!/bin/sh\necho "1.0.0 (Claude Code)"\n' > "$bin/claude"
+  chmod +x "$bin/claude"
+  make_tooling_root
+  export TOOLING_ROOT="$TOOLING" TOOLING_CHECKUP_STATE_DIR="$TEST_DIR/state"
+  printf '{"time":"2026-01-01T00:00:00+00:00","verdict":"healthy","metrics":{"a":"1"}}\n' > "$TEST_DIR/state/last-run.json"
+
+  run env PATH="$bin:/usr/bin:/bin" python3 "$SCRIPTS/checkup_state.py" record --verdict "broken: x" --metric a=2
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "$TEST_DIR/state/history.jsonl")" -eq 2 ]
+  run jq -r '.verdict' "$TEST_DIR/state/history.jsonl"
+  [ "$output" = $'healthy\nbroken: x' ]
+
+  run env PATH="$bin:/usr/bin:/bin" python3 "$SCRIPTS/checkup_state.py" record --verdict "healthy"
+  [ "$(wc -l < "$TEST_DIR/state/history.jsonl")" -eq 3 ]
+}
+
+# Fixture state for the dashboard exporter: two runs, gate timings, doctor stats.
+make_dashboard_fixtures() {
+  local s="$TEST_DIR/state"
+  mkdir -p "$s"
+  cat > "$s/history.jsonl" <<'JSON'
+{"time":"2026-10-01T10:00:00+00:00","verdict":"healthy","metrics":{"machine_overload_rows_24h":"5","agent_tool_hours_7d":"10.5"}}
+{"time":"2026-10-04T10:00:00+00:00","verdict":"healthy with gaps: token ghp_abcdefghijklmnopqrstuvwxyz0123 in /HOMEPATH/x","metrics":{"machine_overload_rows_24h":"197","odd key!":"3","note":"text"}}
+JSON
+  sd -s '/HOMEPATH' "$HOME" "$s/history.jsonl" 2>/dev/null || sed -i.bak "s#/HOMEPATH#$HOME#" "$s/history.jsonl"
+  cat > "$TEST_DIR/gate.jsonl" <<'JSON'
+{"ts":"2026-10-01T09:00:00Z","step":"lint","seconds":12,"status":0}
+{"ts":"2026-10-01T09:00:10Z","step":"total","seconds":100,"status":0}
+{"ts":"2026-10-01T11:00:10Z","step":"total","seconds":300,"status":2}
+{"ts":"2026-10-01T12:00:10Z","step":"total","seconds":200,"status":0}
+{"ts":"2026-10-02T12:00:10Z","step":"total","seconds":50,"status":0}
+not json
+JSON
+  cat > "$TEST_DIR/stats.jsonl" <<'JSON'
+{"task":"doctor","timestamp":"2026-10-01T08:00:00Z","pass":70,"fail":3,"warn":0,"skip":4}
+{"task":"doctor","timestamp":"2026-10-01T20:00:00Z","pass":72,"fail":1,"warn":1,"skip":4}
+{"task":"apply","timestamp":"2026-10-01T21:00:00Z"}
+JSON
+  printf "OSS_READINESS_INTERNAL_PATTERN='secretcorp|hiddenteam'\n" > "$TEST_DIR/pattern.env"
+}
+
+run_dashboard_export() {
+  python3 "$SCRIPTS/dashboard_export.py" --state-dir "$TEST_DIR/state" --out "$TEST_DIR/out" \
+    --gate-timings "$TEST_DIR/gate.jsonl" --doctor-stats "$TEST_DIR/stats.jsonl" \
+    --load-samples "$TEST_DIR/none" --perf-dir "$TEST_DIR/none" --pattern-env "$TEST_DIR/pattern.env" "$@"
+}
+
+@test "dashboard export writes runs, latest, gate and doctor with a manifest" {
+  make_dashboard_fixtures
+  run run_dashboard_export
+  [ "$status" -eq 0 ]
+  run jq -r '[.[] | .id + ":" + (.staleAfterHours // 0 | tostring)] | join(",")' "$TEST_DIR/out/manifest.json"
+  [ "$output" = "runs:72,latest:72,gate:0,doctor:0,load:24,agent_time:48" ]
+  run jq -r '[.[] | .status + "=" + (.machine_overload_rows_24h | tostring)] | join(",")' "$TEST_DIR/out/runs.json"
+  [ "$output" = "healthy=5,gaps=197" ]
+  run jq -r '.[0] | [.machine_overload_rows_24h, has("odd key!"), has("note")] | map(tostring) | join(",")' "$TEST_DIR/out/latest.json"
+  [ "$output" = "197,false,false" ]
+  run jq -c '.' "$TEST_DIR/out/gate.json"
+  [ "$output" = '[{"day":"2026-10-01","failed_runs":1,"median_total_s":200,"runs":3},{"day":"2026-10-02","failed_runs":0,"median_total_s":50,"runs":1}]' ]
+  run jq -c '.' "$TEST_DIR/out/doctor.json"
+  [ "$output" = '[{"day":"2026-10-01","fail":1,"pass":72,"skip":4,"warn":1}]' ]
+}
+
+@test "dashboard export falls back to last-run.json before history exists" {
+  mkdir -p "$TEST_DIR/state"
+  printf '{"time":"2026-10-25T19:10:35+00:00","verdict":"healthy","metrics":{"upgrade_secs":"216"}}\n' > "$TEST_DIR/state/last-run.json"
+  printf 'OSS_READINESS_INTERNAL_PATTERN=secretcorp\n' > "$TEST_DIR/pattern.env"
+  run python3 "$SCRIPTS/dashboard_export.py" --state-dir "$TEST_DIR/state" --out "$TEST_DIR/out" \
+    --gate-timings "$TEST_DIR/none" --doctor-stats "$TEST_DIR/none" --pattern-env "$TEST_DIR/pattern.env"
+  [ "$status" -eq 0 ]
+  run jq -r '.[0].upgrade_secs' "$TEST_DIR/out/latest.json"
+  [ "$output" = "216" ]
+  run jq -r 'length' "$TEST_DIR/out/gate.json"
+  [ "$output" = "0" ]
+}
+
+@test "dashboard export rows hold no token, home path or private-pattern match" {
+  make_dashboard_fixtures
+  printf '{"time":"2026-10-05T10:00:00+00:00","verdict":"broken: SecretCorp proxy down","metrics":{}}\n' >> "$TEST_DIR/state/history.jsonl"
+  run run_dashboard_export
+  [ "$status" -eq 0 ]
+  ! grep -qiE 'secretcorp|hiddenteam' "$TEST_DIR"/out/*.json
+  ! grep -qE 'gh[pousr]_[A-Za-z0-9]{20,}|github_pat_|sk-[A-Za-z0-9_-]{20,}|xox[abprs]-|AKIA[0-9A-Z]{16}' "$TEST_DIR"/out/*.json
+  ! grep -qF "$HOME" "$TEST_DIR"/out/*.json
+  grep -qF '[redacted]' "$TEST_DIR/out/runs.json"
+  # The real private-pattern file, when this machine has one.
+  local real_home env_file
+  real_home="$(eval echo "~$(id -un)")"
+  env_file="$real_home/.config/oss-readiness/oss-readiness.env"
+  if [ -f "$env_file" ]; then
+    local pattern
+    pattern="$(bash -c 'source "$1" >/dev/null 2>&1; printf %s "${OSS_READINESS_INTERNAL_PATTERN:-}"' _ "$env_file")"
+    [ -z "$pattern" ] || ! grep -qicE -- "$pattern" "$TEST_DIR"/out/*.json
+  fi
+}
+
+@test "dashboard export fails closed without the private-pattern file or pattern" {
+  make_dashboard_fixtures
+  run python3 "$SCRIPTS/dashboard_export.py" --state-dir "$TEST_DIR/state" --out "$TEST_DIR/out" \
+    --gate-timings "$TEST_DIR/gate.jsonl" --doctor-stats "$TEST_DIR/stats.jsonl" --pattern-env "$TEST_DIR/none"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"nothing written"* ]]
+  [ ! -e "$TEST_DIR/out" ]
+  printf '# no pattern here\n' > "$TEST_DIR/pattern.env"
+  run run_dashboard_export
+  [ "$status" -eq 2 ]
+  [ ! -e "$TEST_DIR/out" ]
+}
+
+@test "dashboard export applies the pattern as POSIX ERE, like the leak gates" {
+  make_dashboard_fixtures
+  printf "OSS_READINESS_INTERNAL_PATTERN='secret[[:space:]]corp'\n" > "$TEST_DIR/pattern.env"
+  printf '{"time":"2026-10-05T10:00:00+00:00","verdict":"broken: Secret Corp proxy down, mail a@b.example","metrics":{}}\n' >> "$TEST_DIR/state/history.jsonl"
+  run run_dashboard_export
+  [ "$status" -eq 0 ]
+  ! grep -qiE 'secret[[:space:]]corp' "$TEST_DIR"/out/*.json
+  grep -qF '[private]' "$TEST_DIR/out/latest.json"
+  grep -qF '[email]' "$TEST_DIR/out/latest.json"
+}
+
+@test "dashboard export adds hourly load and per-project agent time, grouping private projects" {
+  make_dashboard_fixtures
+  local now=1792975050
+  printf '%s\t2026-10-25T20:00:00\t30\t1\t1\t10\t80\t5\t800\tx:1\t50\n' "$((now - 60))" > "$TEST_DIR/load.tsv"
+  printf '%s\t2026-10-25T20:30:00\t10\t1\t1\t10\t70\t9\t800\tx:1\t50\n' "$((now - 30))" >> "$TEST_DIR/load.tsv"
+  printf '%s\t2026-10-10T20:30:00\t99\t1\t1\t10\t70\t9\t800\tx:1\t50\n' "$((now - 15 * 86400))" >> "$TEST_DIR/load.tsv"
+  mkdir -p "$TEST_DIR/perf"
+  cat > "$TEST_DIR/perf/2026-10.jsonl" <<'JSON'
+{"project":"dotfiles","ts":"2026-10-25T10:00:00Z","tool":"Bash","ms":3600000,"ok":true}
+{"project":"dotfiles","ts":"2026-10-25T11:00:00Z","tool":"Bash","ms":1800000,"ok":false}
+{"project":"secretcorp-app","ts":"2026-10-25T11:00:00Z","tool":"Read","ms":360000,"ok":true}
+{"project":"dotfiles","ts":"2026-10-25T11:00:00Z","ev":"attempt","tool":"Bash"}
+{"project":"dotfiles","ts":"2026-09-01T11:00:00Z","tool":"Bash","ms":99,"ok":true}
+JSON
+  run run_dashboard_export --load-samples "$TEST_DIR/load.tsv" --perf-dir "$TEST_DIR/perf" --now "$now"
+  [ "$status" -eq 0 ]
+  run jq -c '.' "$TEST_DIR/out/load.json"
+  [ "$output" = '[{"hour":"2026-10-25T20:00","max_swap_mb":9,"mean_load1":20,"min_free_mem_pct":70,"overload_samples":1,"peak_load1":30,"samples":2}]' ]
+  run jq -c '.' "$TEST_DIR/out/agent_time.json"
+  [ "$output" = '[{"calls":2,"day":"2026-10-25","failed_calls":1,"project":"dotfiles","tool_hours":1.5},{"calls":1,"day":"2026-10-25","failed_calls":0,"project":"other","tool_hours":0.1}]' ]
+  ! grep -qi secretcorp "$TEST_DIR"/out/*.json
+  run jq -r '[.[].id] | join(",")' "$TEST_DIR/out/manifest.json"
+  [ "$output" = "runs,latest,gate,doctor,load,agent_time" ]
+  grep -q 'data-source="load"' "$SKILL_DIR/dashboard/index.html"
+  grep -q 'data-source="agent_time"' "$SKILL_DIR/dashboard/index.html"
 }

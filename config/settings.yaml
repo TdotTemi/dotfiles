@@ -67,6 +67,10 @@ settings:
     type: bool
     default: "@owner_machine"
     description: Map Caps Lock to Control (com.dotfiles.capslock-control LaunchAgent).
+  trackpad_swipe_fingers:
+    type: int
+    default: 4
+    description: Fingers for trackpad swipes between desktops and Mission Control (3 or 4). 3 also turns three-finger drag off.
   global_git_hooks:
     type: bool
     default: true
@@ -91,6 +95,14 @@ settings:
     type: bool
     default: "@use_local_ai|owner_machine"
     description: Load the local-AI LaunchAgents (opencode serve, Ollama, model warmup).
+  gh_admin_scopes:
+    type: bool
+    default: "@owner_machine"
+    description: Require the workflow, admin:public_key and delete_repo gh scopes in the git doctor.
+  keep_awake_tools:
+    type: bool
+    default: derived
+    description: Load the sleepwatcher LaunchAgent and check Amphetamine (lid-close persistence). Derived from the profile (true on full); set true to opt in on core.
   use_encryption:
     type: bool
     default: false

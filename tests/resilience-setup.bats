@@ -27,6 +27,8 @@ setup_lid_close_stubs() {
 printf 'pmset %s\n' "$*" >> "$CALL_LOG"
 cat "$PMSET_OUTPUT_FILE"
 STUB
+  # launchctl print is read-only; LAUNCHCTL_PRINT_STATUS=1 means "not loaded".
+  printf '#!/bin/bash\nexit "${LAUNCHCTL_PRINT_STATUS:-0}"\n' > "$STUB_BIN/launchctl"
   for tool in sudo osascript open brew mas; do
     printf '#!/bin/bash\nprintf "%s %%s\\n" "$*" >> "$CALL_LOG"\n' "$tool" > "$STUB_BIN/$tool"
   done
@@ -86,6 +88,15 @@ PLIST
   [[ "$output" == *"Lid close will not sleep this Mac now"* ]]
   [[ "$output" == *"(CLI and desktop app) are covered"* ]]
   [[ "$output" != *"Lid close will sleep this Mac."* ]]
+}
+
+@test "resilience-setup: --lid-close says sessions are NOT covered when agent-keepawake is not loaded" {
+  setup_lid_close_stubs
+  mkdir -p "$AMPHETAMINE_APP_PATH"
+  LAUNCHCTL_PRINT_STATUS=1 run bash "$BATS_TEST_DIRNAME/../bin/dotfiles-resilience-setup" --lid-close
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"are NOT covered: the agent-keepawake LaunchAgent is not loaded"* ]]
+  [[ "$output" != *"(CLI and desktop app) are covered"* ]]
 }
 
 @test "resilience-setup: --lid-close lists enabled scheduled LaunchAgents only" {
