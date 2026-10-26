@@ -44,6 +44,8 @@ script_label() {
   esac
 }
 
+TRACKPAD_SWIPE_FINGERS="${DOTFILES_TRACKPAD_SWIPE_FINGERS:-$(chezmoi execute-template '{{ dig "trackpad_swipe_fingers" 4 . }}' 2>/dev/null || echo "4")}"
+
 # Preview a single default entry
 preview_default() {
   local domain="$1" key="$2" dtype="$3" value="$4" script="$5" section="$6" currenthost="$7" expand_vars="$8"
@@ -51,6 +53,11 @@ preview_default() {
   # Expand variables if needed
   if [ "$expand_vars" = "true" ]; then
     value="${value//\$HOME/$HOME}"
+  fi
+
+  # trackpad_swipe_fingers: 3 turns three-finger drag off (macos-trackpad.sh).
+  if [ "$key" = "TrackpadThreeFingerDrag" ] && [ "$TRACKPAD_SWIPE_FINGERS" = "3" ]; then
+    value="false"
   fi
 
   # Print script header on change
