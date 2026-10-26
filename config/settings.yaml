@@ -99,6 +99,10 @@ settings:
     type: bool
     default: "@owner_machine"
     description: Require the workflow, admin:public_key and delete_repo gh scopes in the git doctor.
+  keep_awake_tools:
+    type: bool
+    default: derived
+    description: Load the sleepwatcher LaunchAgent and check Amphetamine (lid-close persistence). Derived from the profile (true on full); set true to opt in on core.
   use_encryption:
     type: bool
     default: false

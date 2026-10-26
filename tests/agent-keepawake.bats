@@ -617,7 +617,7 @@ EOF
 @test "LaunchAgent deployment gate accepts a Claude desktop app install alone" {
   local launchagent_setup="$BATS_TEST_DIRNAME/../.chezmoiscripts/run_onchange_launchagents.sh.tmpl"
   eval "$(sed -n '/^should_skip_agent() {/,/^}/p' "$launchagent_setup")"
-  PROFILE=full
+  PROFILE=full KEEP_AWAKE_TOOLS=true
   PATH="/usr/bin:/bin"
 
   run should_skip_agent agent-keepawake

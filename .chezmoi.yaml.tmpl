@@ -131,6 +131,13 @@
 {{- if hasKey . "gh_admin_scopes" -}}
 {{-   $ghAdminScopes = .gh_admin_scopes -}}
 {{- end -}}
+{{/* keep_awake_tools loads the sleepwatcher LaunchAgent and runs the
+     doctor checks for it and for Amphetamine (lid-close persistence).
+     Default: the full profile only. Set true on a core Mac to opt in. */ -}}
+{{- $keepAwakeTools := eq $profile "full" -}}
+{{- if hasKey . "keep_awake_tools" -}}
+{{-   $keepAwakeTools = .keep_awake_tools -}}
+{{- end -}}
 {{/* trackpad_swipe_fingers: 3 or 4 fingers for swipes between desktops
      and Mission Control (macos-trackpad.sh). 3 also turns three-finger drag
      off. Default 4, which changes nothing. */ -}}
@@ -191,6 +198,7 @@ data:
   use_local_ai: {{ $useLocalAi }}
   local_ai_agents: {{ $localAiAgents }}
   gh_admin_scopes: {{ $ghAdminScopes }}
+  keep_awake_tools: {{ $keepAwakeTools }}
   use_encryption: {{ $useEncryption }}
   age_recipient: {{ $ageRecipient | quote }}
   morning_hour: {{ $morningHour }}
