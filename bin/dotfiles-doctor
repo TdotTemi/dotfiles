@@ -80,6 +80,9 @@ LOCAL_AI_AGENTS="${DOTFILES_LOCAL_AI_AGENTS:-$(chezmoi execute-template '{{ dig 
 # gh_admin_scopes: same default as .chezmoi.yaml.tmpl.
 GH_ADMIN_SCOPES="${DOTFILES_GH_ADMIN_SCOPES:-$(chezmoi execute-template '{{ dig "gh_admin_scopes" (dig "owner_machine" true .) . }}' 2>/dev/null || echo "false")}"
 
+# shellcheck disable=SC2034  # used by sourced doctor modules
+TRACKPAD_SWIPE_FINGERS="${DOTFILES_TRACKPAD_SWIPE_FINGERS:-$(chezmoi execute-template '{{ dig "trackpad_swipe_fingers" 4 . }}' 2>/dev/null || echo "4")}"
+
 # ── Module discovery roots ───────────────────────────────────────────
 # Core modules live under "$DOTFILES_DIR/modules/". Company plugins add
 # modules through plugins.lock (below); the v1 overlay was removed.

@@ -73,7 +73,14 @@ check_defaults "macos.mouse_speed"        "Mouse tracking speed = 3"     NSGloba
 # ── Trackpad ─────────────────────────────────────────────────────────
 check_defaults "macos.trackpad_speed"     "Trackpad tracking speed = 3"  NSGlobalDomain com.apple.trackpad.scaling             "3" float
 check_defaults "macos.tap_to_click"       "Tap to click"                 com.apple.AppleMultitouchTrackpad Clicking             "1" bool
-check_defaults "macos.three_finger_drag"  "Three-finger drag"            com.apple.AppleMultitouchTrackpad TrackpadThreeFingerDrag "1" bool
+# trackpad_swipe_fingers: 3 moves swipes to 3 fingers and turns drag off.
+if [ "${TRACKPAD_SWIPE_FINGERS:-4}" = "3" ]; then
+  check_defaults "macos.three_finger_drag"  "Three-finger drag off (swipes use 3 fingers)" com.apple.AppleMultitouchTrackpad TrackpadThreeFingerDrag "0" bool
+  check_defaults "macos.three_finger_swipe" "Three-finger swipe between desktops" com.apple.AppleMultitouchTrackpad TrackpadThreeFingerHorizSwipeGesture "2" int
+  check_defaults "macos.three_finger_mission_control" "Three-finger swipe up for Mission Control" com.apple.AppleMultitouchTrackpad TrackpadThreeFingerVertSwipeGesture "2" int
+else
+  check_defaults "macos.three_finger_drag"  "Three-finger drag"            com.apple.AppleMultitouchTrackpad TrackpadThreeFingerDrag "1" bool
+fi
 
 # ── Window management ────────────────────────────────────────────────
 check_defaults "macos.tiling_edge"        "Window tiling by edge drag"   com.apple.WindowManager EnableTilingByEdgeDrag "1" bool
