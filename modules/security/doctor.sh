@@ -667,8 +667,11 @@ if [ -d "$_uv_python_root" ]; then
     "'$DOTFILES_DIR/bin/dotfiles-adhoc-sign-uv-pythons'  # com.dotfiles.endpoint-bootstrap runs at login"
 fi
 
-# Apply installs endpoint-bootstrap only with endpoint_hardening on.
-if [ "${ENDPOINT_HARDENING:-true}" = "true" ]; then
+# Apply installs endpoint-bootstrap only with endpoint_hardening on. The value
+# is "true"/"false" from chezmoi data or "1"/"0" from DOTFILES_ENDPOINT_HARDENING
+# (chezmoi scriptEnv).
+case "${ENDPOINT_HARDENING:-true}" in true|1) _endpoint_hardening_on=true ;; *) _endpoint_hardening_on=false ;; esac
+if [ "$_endpoint_hardening_on" = "true" ]; then
   _adhoc_sign_uv_la="$HOME/Library/LaunchAgents/com.dotfiles.endpoint-bootstrap.plist"
   check "security.endpoint_bootstrap_la" "Login endpoint-bootstrap LaunchAgent installed (jq + uv sign before minsky RunAtLoad)" \
     "[ -f '$_adhoc_sign_uv_la' ]" \
