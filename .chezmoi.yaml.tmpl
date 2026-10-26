@@ -124,6 +124,13 @@
 {{- if hasKey . "capslock_control" -}}
 {{-   $capslockControl = .capslock_control -}}
 {{- end -}}
+{{/* gh_admin_scopes makes the git doctor require the workflow,
+     admin:public_key and delete_repo gh scopes. Default: owner_machine, so a
+     new user's agents never need power to delete repos or change SSH keys. */ -}}
+{{- $ghAdminScopes := $ownerMachine -}}
+{{- if hasKey . "gh_admin_scopes" -}}
+{{-   $ghAdminScopes = .gh_admin_scopes -}}
+{{- end -}}
 {{/* keep_awake_tools loads the sleepwatcher LaunchAgent and runs the
      doctor checks for it and for Amphetamine (lid-close persistence).
      Default: the full profile only. Set true on a core Mac to opt in. */ -}}
@@ -190,6 +197,7 @@ data:
   use_ai_tools: {{ $useAiTools }}
   use_local_ai: {{ $useLocalAi }}
   local_ai_agents: {{ $localAiAgents }}
+  gh_admin_scopes: {{ $ghAdminScopes }}
   keep_awake_tools: {{ $keepAwakeTools }}
   use_encryption: {{ $useEncryption }}
   age_recipient: {{ $ageRecipient | quote }}
