@@ -239,6 +239,18 @@
         "Puts only the dashboard link, the run page path and the verdict in chat"
       ],
       "id": 20
+    },
+    {
+      "prompt": "/tooling-checkup (the same 'never force-push' rule is in the shared rules and in a memory file; a memory names a branch that was deleted last week; one hook exits 1 on every call; agentbrew sync just added a skill whose triggers match one of the user's own skills)",
+      "expected_output": "In Phase 7, after the script audit, the agent backs up the config, keeps the force-push rule only in the shared rules and deletes the memory copy, deletes or updates the stale branch memory, pipe-tests the hook and puts the failing one in the questionnaire without editing it, and reports the overlapping new skill with a proposal for the personal copy.",
+      "expectations": [
+        "Backs up rules, settings, skills, and memory before editing them",
+        "Keeps the duplicated rule in one home and removes the other copy",
+        "Updates or deletes the memory that names a deleted branch",
+        "Pipe-tests the hook and asks before changing it",
+        "Reports the new skill that overlaps a personal skill, with a proposal"
+      ],
+      "id": 21
     }
   ]
 }

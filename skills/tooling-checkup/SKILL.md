@@ -265,6 +265,7 @@ the echo test ran with before and after numbers, or the script printed
 Follow [reference/config-audit.md](reference/config-audit.md). Run
 `scripts/audit_agent_config.py --cache`, then make the judgment checks.
 Ship small fixes in the source repo. Put big changes in the questionnaire.
+Then follow [reference/config-hygiene.md](reference/config-hygiene.md).
 
 ### Monthly: new-project requirements audit
 
