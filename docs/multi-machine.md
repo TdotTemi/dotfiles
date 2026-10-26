@@ -245,6 +245,47 @@ The age key is never tracked in git. Transfer it securely (e.g., AirDrop, encryp
 
 ---
 
+## Personal Agent Files
+
+dotfiles moves shell and git config, and agentbrew rebuilds the shared agent
+config from its sources (`agentbrew sync`). Neither moves the files you wrote
+for your own agent: memory, personal skills, and hand-edited rules or
+settings. Keep those in a **private** git repo of their own.
+
+| Part | In the private repo? |
+|---|---|
+| Memory, personal skills, personal rules and settings | yes |
+| Files agentbrew generates (synced skills, deployed rules, MCP config) | no: `agentbrew sync` rebuilds them |
+| Secrets (OAuth client files, MCP URLs with keys, API tokens) | never: keep them in your password manager |
+| Logins, tokens, sessions, caches, transcripts | no: log in again on each Mac |
+
+### Back up
+
+1. Use an allow-list `.gitignore` in the agent folder (`*` first, then `!`
+   lines for the folders you keep), so a new cache never lands in git.
+2. Before each commit, scan the staged files for secrets and stop on a hit
+   (for example a refresh token, an OAuth client secret, or a key in a URL).
+   Print file names only, never the matched value.
+3. Commit with a conventional message (the `commit-msg` hook rejects others)
+   and push only to a private remote. Check with
+   `gh repo view <repo> --json visibility`.
+
+### Restore on a new Mac
+
+1. Install dotfiles (see [onboarding.md](onboarding.md)), then agentbrew
+   (`agentbrew sync`).
+2. Clone the private repo into the agent folder.
+3. Put the secret files back from your password manager.
+4. Re-register each MCP server or connector and log in to each account.
+5. Run `dotfiles doctor` and `agentbrew status`, then start a session and
+   confirm that the memory and personal skills load.
+
+### Share with another person
+
+Share skills, never memory or secrets. Package the skills as an agent plugin
+or a skill source repo they add with agentbrew. Each person logs in with
+their own accounts, so actions show under their name.
+
 ## Further Reading
 
 - [Onboarding guide](onboarding.md) — full setup walkthrough
