@@ -76,8 +76,10 @@ should_skip_agent() {
     # Silent system-wide upgrades require explicit opt-in
     dotfiles-upgrade)
       [ "$AUTO_UPGRADE" != "true" ] && return 0 ;;
+    # keep_awake_tools (default: full profile) also covers a core Mac that
+    # opts in, so lid-close protection matches sleepwatcher and Amphetamine.
     agent-keepawake)
-      [ "$PROFILE" != "full" ] && return 0
+      [ "${KEEP_AWAKE_TOOLS:-false}" != "true" ] && return 0
       [ ! -x "$HOME/.local/bin/claude" ] \
         && ! command -v claude >/dev/null 2>&1 \
         && [ ! -d "$HOME/Library/Application Support/Claude/claude-code" ] \

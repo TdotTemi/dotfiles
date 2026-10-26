@@ -198,12 +198,12 @@ check "resilience.agent_wake_recover_script" "dotfiles-agent-wake-recover execut
   "[ -x \"\$DOTFILES_DIR/bin/dotfiles-agent-wake-recover\" ]" \
   "chmod +x \"\$DOTFILES_DIR/bin/dotfiles-agent-wake-recover\""
 
-check "resilience.agent_keepawake_loaded" "agent-keepawake LaunchAgent loaded (full + Claude Code)" \
-  "[ \"\${DOTFILES_PROFILE:-full}\" != full ] || { [ ! -x \"\$HOME/.local/bin/claude\" ] && ! dotfiles_agent_desktop_claude_installed; } || launchctl print \"gui/\$(id -u)/com.dotfiles.agent-keepawake\" >/dev/null 2>&1" \
+check "resilience.agent_keepawake_loaded" "agent-keepawake LaunchAgent loaded (keep_awake_tools + Claude Code)" \
+  "[ \"\${KEEP_AWAKE_TOOLS:-true}\" != true ] || { [ ! -x \"\$HOME/.local/bin/claude\" ] && ! dotfiles_agent_desktop_claude_installed; } || launchctl print \"gui/\$(id -u)/com.dotfiles.agent-keepawake\" >/dev/null 2>&1" \
   "launchctl bootstrap gui/\$UID \"\$HOME/Library/LaunchAgents/com.dotfiles.agent-keepawake.plist\" 2>/dev/null || dotfiles apply"
 
 check "resilience.agent_keepawake_battery_policy" "agent keepawake covers AC and battery at or above 20%" \
-  "[ \"\${DOTFILES_PROFILE:-full}\" != full ] || { [ ! -x \"\$HOME/.local/bin/claude\" ] && ! dotfiles_agent_desktop_claude_installed; } || _agent_keepawake_battery_policy_configured" \
+  "[ \"\${KEEP_AWAKE_TOOLS:-true}\" != true ] || { [ ! -x \"\$HOME/.local/bin/claude\" ] && ! dotfiles_agent_desktop_claude_installed; } || _agent_keepawake_battery_policy_configured" \
   "dotfiles apply && launchctl kickstart -k gui/\$UID/com.dotfiles.agent-keepawake"
 
 check_advisory "resilience.agent_keepawake_lid_closed_automation" "Amphetamine Automation is ready for lid-closed agent work" \

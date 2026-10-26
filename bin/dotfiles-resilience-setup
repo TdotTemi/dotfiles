@@ -55,9 +55,18 @@ report_lid_close() {
   else
     warn "Lid close will sleep this Mac. pmset sleep 0 does not stop lid-close sleep."
   fi
-  if [ -d "$(dotfiles_agent_amphetamine_app_path)" ]; then
-    hint "Running Claude Code sessions (CLI and desktop app) are covered: the keepawake manager starts an Amphetamine session for them"
+  if [ ! -d "$(dotfiles_agent_amphetamine_app_path)" ]; then
+    hint "Install Amphetamine (step 4) so the keepawake manager can cover running Claude Code sessions"
+  elif ! launchctl print "gui/$(id -u)/com.dotfiles.agent-keepawake" >/dev/null 2>&1; then
+    warn "Running Claude Code sessions are NOT covered: the agent-keepawake LaunchAgent is not loaded"
+    hint "fix: set keep_awake_tools: true (core profile), then run chezmoi init and dotfiles apply"
+  elif [ -s "$(dotfiles_agent_amphetamine_error_file)" ]; then
+    warn "Running Claude Code sessions are NOT covered: the last Amphetamine call failed ($(head -1 "$(dotfiles_agent_amphetamine_error_file)"))"
+    hint "fix: approve Automation for Amphetamine when macOS asks, then run dotfiles-agent-keepawake"
   else
+    hint "Running Claude Code sessions (CLI and desktop app) are covered: the keepawake manager starts an Amphetamine session for them"
+  fi
+  if false; then
     hint "Install Amphetamine (step 4) so the keepawake manager can cover running Claude Code sessions"
   fi
 

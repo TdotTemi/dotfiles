@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
-# keep_awake_tools decides whether apply loads sleepwatcher and whether the
-# doctor checks it and Amphetamine. Default: the full profile only.
+# keep_awake_tools decides whether apply loads sleepwatcher and agent-keepawake,
+# and whether the doctor checks them and Amphetamine. Default: full profile only.
 
 load test_helper
 
@@ -57,4 +57,30 @@ _setup_sleepwatcher_block() {
   [[ "$output" == *"keep_awake_tools is false"* ]]
   run _setup_sleepwatcher_block true
   [[ "$output" == *"warn: sleepwatcher LaunchAgent not loaded"* ]]
+}
+
+@test "keep_awake_tools=true loads agent-keepawake on a core Mac with Claude Code" {
+  PROFILE=core KEEP_AWAKE_TOOLS=true HOME="$BATS_TEST_TMPDIR"
+  mkdir -p "$HOME/.local/bin" && printf '#!/bin/sh\n' > "$HOME/.local/bin/claude" && chmod +x "$HOME/.local/bin/claude"
+  run should_skip_agent agent-keepawake
+  [ "$status" -eq 1 ]
+}
+
+@test "keep_awake_tools=false skips agent-keepawake, even on full" {
+  PROFILE=full KEEP_AWAKE_TOOLS=false
+  run should_skip_agent agent-keepawake
+  [ "$status" -eq 0 ]
+}
+
+@test "doctor expects agent-keepawake only when keep_awake_tools is on" {
+  DOCTOR="$BATS_TEST_DIRNAME/../modules/resilience/doctor.sh"
+  grep 'resilience.agent_keepawake_loaded' -A1 "$DOCTOR" | grep -q 'KEEP_AWAKE_TOOLS:-true'
+  grep 'resilience.agent_keepawake_battery_policy' -A1 "$DOCTOR" | grep -q 'KEEP_AWAKE_TOOLS:-true'
+  ! grep -q 'DOTFILES_PROFILE:-full}\\" != full' "$DOCTOR"
+}
+
+@test "lid-close report does not claim coverage when agent-keepawake is not loaded" {
+  SETUP="$BATS_TEST_DIRNAME/../bin/dotfiles-resilience-setup"
+  grep -q 'launchctl print "gui/$(id -u)/com.dotfiles.agent-keepawake"' "$SETUP"
+  grep -q 'are NOT covered: the agent-keepawake LaunchAgent is not loaded' "$SETUP"
 }
