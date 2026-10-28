@@ -28,6 +28,7 @@ them. -->
 
 - [ ] Headless browser test runs bypass the heavy-run lock
   - **ID**: headless-browser-runs-bypass-heavy-run
+  - **Blocked**: needs-time — 2026-10-28: shipped the hook extension (e2e/ui scripts, exec playwright, make e2e/test-all) and the doctor check `resilience.headless_chrome_under_heavy_run`; Acceptance part 1 is met. Part 2 needs data: read the unexplained-overload count in the tooling-checkup machine-metrics phase on the next two checkups after this lands, then close (under 40 rows, peak load1 under 100) or pivot (over 150 rows).
   - **Tags**: performance, reliability, agents
   - **Details**: The 2026-10-27 `/tooling-checkup` found 197 unexplained overload rows (load1 over 20) in the last 24 h of `machine_metrics`, peak load1 257.6 at 2026-10-27T09:16. The top processes in those rows were `chrome-headless-shell` (112 rows), `python` (105), and `node` (84). The 2026-10-25 checkup had the same 197 count, so the problem persists. `heavy-run` only queues commands that agents wrap by hand; Playwright and agent-browser runs started directly (e2e suites, UI audits, MCP browser sessions) do not take the lock. Find which callers start headless Chrome without the lock, then make the lock hard to skip: for example, a Playwright/agent-browser wrapper on PATH that takes the `heavy-run` lock, or a doctor/hook warning when a browser test runs outside it.
   - **Files**: `bin/heavy-run`, `modules/resilience/doctor.sh`, `docs/` (heavy-run doc), `tests/`
@@ -143,6 +144,20 @@ them. -->
   - **Pivot**: still over 2 min/day after 7 days -> profile per step from `~/.local/state/dotfiles/gate-timings.jsonl` and drop this approach.
   - **Anchor**: tooling-checkup agent time review 2026-10-20; Forsgren, Humble, Kim 2018 (lead time); perf-review skill known fixes.
   - **Competitive-goal**: none — agent gate speed (docs/metrics.md gate row), not a scorecard metric.
+
+- [ ] Close the remaining heavy-run hook bypasses
+  - **ID**: heavy-run-hook-wrapper-coverage
+  - **Tags**: performance, reliability, agents
+  - **Details**: The `require-heavy-run` hook reads simple commands only. It misses `npx` flags and version suffixes (`npx -y playwright@1 test`), `npm exec` with flags, `./node_modules/.bin/playwright test`, `bun`, `turbo`, `gmake`, `bash -c "..."`, and `$(...)` inside a word (`make -j$(nproc) e2e`). Review of dotfiles #373 listed them. Parse these forms, or move the check to a shell wrapper on PATH, and keep the single-test allowances.
+  - **Files**: `agent-hooks/require-heavy-run.sh`, `tests/agent-hooks-require-heavy-run.bats`, `docs/agent-hooks.md`
+  - **Output**: code
+  - **Acceptance**: each bypass form above is blocked unwrapped and allowed under `heavy-run`, in the hook test.
+  - **Hypothesis**: closing these forms cuts headless Chrome runs outside the lock (`bin/headless-chrome-unlocked`, sampled by the resilience doctor) to 0 on at least 90 percent of daily samples, from the level after #373.
+  - **Measurement**: `bin/headless-chrome-unlocked` count in the 24 h `machine_metrics` window of the tooling-checkup, 7 days after the change lands.
+  - **Success**: count is 0 on at least 90 percent of samples.
+  - **Pivot**: still over 20 percent of samples non-zero -> the bypasses are not in the hook's blind spots; profile the callers with `ps` ancestry and drop the hook approach.
+  - **Anchor**: dotfiles #373 review; Gunther 2007, *Guerrilla Capacity Planning* (load beyond core count).
+  - **Competitive-goal**: none — machine stability for agent work (docs/metrics.md), not a scorecard metric.
 
 ## P3
 

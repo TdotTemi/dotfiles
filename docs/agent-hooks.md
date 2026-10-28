@@ -49,7 +49,30 @@ migration architecture.
 dotfiles Agentfile. It blocks full test suites and builds that do not start
 with `heavy-run`: `npm test`, `npm run test*`, `yarn`/`pnpm` test or build
 scripts, `vitest`/`jest` with no file argument, `playwright test`, and `bats`
-on a folder. It checks each part of a `&&`, `||`, `;`, or `|` chain.
-Single-file runs (`npx vitest run one.test.ts`, `bats tests/x.bats`) pass.
+on a folder. It also blocks the other headless-browser entry points:
+`e2e*` and `ui*` package scripts, `npm exec`/`pnpm exec`/`yarn playwright test`,
+and `make e2e`, `make test-all`, or `make test-force` (`make -n` passes). It checks each part of a `&&`, `||`, `;`, or `|` chain.
+Single-file and single-test runs (`npx vitest run one.test.ts`, `bats tests/x.bats`,
+`pnpm ui -g login`, `playwright test tests/one.spec.ts`) pass. It also reads
+`pnpm --filter <pkg> e2e`, `pnpm dlx`, and `bunx playwright test`.
 Set `HEAVY_RUN_HOOK=off` to turn it off. Tests:
 `tests/agent-hooks-require-heavy-run.bats`.
+
+The doctor check `resilience.headless_chrome_under_heavy_run` is the safety
+net for runs the hook cannot see (a plain `node script.js` that starts
+Chrome). `bin/headless-chrome-unlocked` counts headless Chrome main
+processes with no `heavy-run` parent; the check warns above
+`HEADLESS_UNLOCKED_MAX` (default 3). Why: the 2026-10-27 checkup found
+`chrome-headless-shell` on top of the overload rows. A launcher that starts
+Chrome itself must also pass `--use-mock-keychain --password-store=basic`.
+
+The hook strips the prefixes `time`, `timeout`, `env`, `sudo`, `nice`, `nohup`, `caffeinate`,
+`command`, and `exec` (with their own flags), reads `if`/`while`/`then`/`do` bodies, `( ... )`
+and `{ ...; }` groups, and `$(...)` or backticks inside double quotes. A `-g`, `--grep`, `-t`, or
+`--testNamePattern` filter, or a spec path, marks a one-test run; the value of any other flag
+(`--output out/res`) does not.
+
+Still not seen by the hook (task `heavy-run-hook-wrapper-coverage`): `npx` flags and version
+suffixes (`npx -y playwright@1 test`), `./node_modules/.bin/playwright test`, `bun`, `turbo`,
+`gmake`, `bash -c "..."`, and a `$(...)` that sits inside a word (`make -j$(nproc) e2e`).
+The doctor check is the net for these.

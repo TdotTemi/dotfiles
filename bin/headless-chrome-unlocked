@@ -1,0 +1,63 @@
+#!/bin/bash
+# headless-chrome-unlocked — count headless Chrome runs outside the heavy-run lock.
+#
+# A run is one headless Chrome main process (no --type=) with no heavy-run
+# process among its parents. Playwright and e2e fan-out show up here.
+#
+# Usage:
+#   headless-chrome-unlocked            # print the count
+#   headless-chrome-unlocked --check    # exit 1 and say why when over the max
+#
+# Env:
+#   HEADLESS_UNLOCKED_MAX   allowed unlocked runs (default 3: one shared
+#                           agent-browser Chrome plus a little slack)
+
+set -euo pipefail
+
+max="${HEADLESS_UNLOCKED_MAX:-3}"
+
+count=$(ps -axo pid=,ppid=,command= | awk '
+  { pid = $1; ppid[pid] = $2; $1 = ""; $2 = ""; cmd[pid] = $0 }
+  # The lock holder: bin/heavy-run itself, or its perl lock process
+  # (perl ... <dir>/lock <dir>/owner <nice> <command>). Text that only
+  # mentions heavy-run (grep, a commit message) is not the lock.
+  function is_lock(c,   t, b) {
+    sub(/^ +/, "", c)
+    split(c, t, " ")
+    b = t[1]
+    if (b ~ /(^|\/)(ba|z|da)?sh$/) b = t[2]
+    if (b ~ /(^|\/)heavy-run$/) return 1
+    if (t[1] ~ /(^|\/)perl$/ && c ~ / [^ ]*\/lock [^ ]*\/owner [0-9]+ /) return 1
+    return 0
+  }
+  END {
+    n = 0
+    for (p in cmd) {
+      c = cmd[p]
+      if (c ~ /--type=/ || c !~ /(chrome-headless-shell|--headless)/) continue
+      # The part before the first flag must be a Chrome binary, not a wrapper
+      # (bash dotfiles-quit-relay <chrome>) or a search tool (rg --headless).
+      pre = c; i = index(c, " --"); if (i > 0) pre = substr(c, 1, i - 1)
+      sub(/^ +/, "", pre)
+      if (pre !~ /^\// || pre ~ /^\/[^ ]*\/(bash|sh|zsh|node|perl|python[0-9.]*|ruby) /) continue
+      if (pre !~ /(chrome-headless-shell|MacOS\/(Google Chrome|Chromium)( for Testing)?)$/) continue
+      locked = 0; q = ppid[p]; hops = 0
+      while (q in cmd && hops < 30) {
+        if (is_lock(cmd[q])) { locked = 1; break }
+        q = ppid[q]; hops++
+      }
+      if (!locked) n++
+    }
+    print n
+  }')
+
+case "${1:-}" in
+  --check)
+    if [ "$count" -gt "$max" ]; then
+      echo "$count headless Chrome runs are outside the heavy-run lock (max $max). Start browser test runs as: heavy-run <command>"
+      exit 1
+    fi
+    ;;
+  "") echo "$count" ;;
+  *) echo "Usage: headless-chrome-unlocked [--check]" >&2; exit 2 ;;
+esac
