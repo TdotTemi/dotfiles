@@ -367,3 +367,143 @@ expected_eval() {
   # The close is reported at once, not after the 10 s no-answer timeout.
   [ "$SECONDS" -lt 8 ]
 }
+
+@test "upload sets the file on the tab's file input through DOM calls" {
+  cdp_setup
+  cat > "$TEST_DIR/cdp" <<'STUB'
+#!/bin/bash
+echo "$1 $2 $3" >> "$CDP_CALLS"
+case "$2" in
+  DOM.getDocument) echo '{"root":{"nodeId":1}}' ;;
+  DOM.querySelector) echo '{"nodeId":7}' ;;
+  *) echo '{}' ;;
+esac
+STUB
+  id="$(open_tab agent-a r)"; chrome_has "$id" https://example.com/
+  echo data > "$TEST_DIR/f.txt"
+  run "$SCRIPT" upload --owner agent-a "$id" "$TEST_DIR/f.txt"
+  [ "$status" -eq 0 ]
+  grep -q 'DOM.querySelector.*input\[type=file\]' "$CDP_CALLS"
+  grep -q "DOM.setFileInputFiles.*\"nodeId\":7.*f.txt" "$CDP_CALLS"
+}
+
+@test "upload from another owner exits 3 and a missing file exits 2" {
+  cdp_setup
+  id="$(open_tab agent-a "bot login")"; chrome_has "$id" https://example.com/
+  echo data > "$TEST_DIR/f.txt"
+  run "$SCRIPT" upload --owner agent-b "$id" "$TEST_DIR/f.txt"
+  [ "$status" -eq 3 ]
+  run "$SCRIPT" upload --owner agent-a "$id" "$TEST_DIR/none.txt"
+  [ "$status" -eq 2 ]
+}
+
+# --- upload over the real one-socket node client (no AGENT_TAB_CDP stub) ---
+
+upload_ws_setup() {
+  cdp_setup
+  unset AGENT_TAB_CDP
+  node "$BATS_TEST_DIRNAME/fixtures/fake-cdp-dom-ws.mjs" "$TEST_DIR/port" "$TEST_DIR/dom.log" &
+  srv=$!
+  for _ in $(seq 50); do [ -s "$TEST_DIR/port" ] && break; sleep 0.1; done
+  id="$(open_tab agent-a r)"
+  jq --arg id "$id" --arg ws "ws://127.0.0.1:$(cat "$TEST_DIR/port")/$id" \
+    '. + [{id: $id, type: "page", url: "https://example.com/", webSocketDebuggerUrl: $ws}]' \
+    "$TABS_JSON" > "$TEST_DIR/t.json" && mv "$TEST_DIR/t.json" "$TABS_JSON"
+  echo data > "$TEST_DIR/f.txt"
+}
+
+@test "upload runs getDocument, querySelector, setFileInputFiles on one socket" {
+  upload_ws_setup
+  run "$SCRIPT" upload --owner agent-a --selector '.main input[type=file]' "$id" "$TEST_DIR/f.txt"
+  kill "$srv" 2>/dev/null || true
+  [ "$status" -eq 0 ]
+  [ "$(cut -d' ' -f1 "$TEST_DIR/dom.log" | tr '\n' ,)" = "DOM.getDocument,DOM.querySelector,DOM.setFileInputFiles," ]
+  grep -q '"selector":".main input\[type=file\]"' "$TEST_DIR/dom.log"
+  grep -q 'f.txt' "$TEST_DIR/dom.log"
+}
+
+@test "upload fails when no element matches the selector" {
+  upload_ws_setup
+  run "$SCRIPT" upload --owner agent-a --selector '#missing' "$id" "$TEST_DIR/f.txt"
+  kill "$srv" 2>/dev/null || true
+  [ "$status" -eq 1 ]
+  ! grep -q setFileInputFiles "$TEST_DIR/dom.log"
+}
+
+# --- upload refuses secret-looking files unless --force ---
+
+@test "upload refuses ssh, gnupg, keychain, and pem files without --force" {
+  cdp_setup
+  id="$(open_tab agent-a r)"; chrome_has "$id" https://example.com/
+  export HOME="$TEST_DIR/home"
+  mkdir -p "$HOME/.ssh" "$HOME/.gnupg" "$HOME/Library/Keychains" "$TEST_DIR/x"
+  for f in "$HOME/.ssh/id_ed25519" "$HOME/.gnupg/pubring.kbx" "$HOME/Library/Keychains/login.keychain-db" "$TEST_DIR/x/cert.pem"; do
+    echo secret > "$f"
+    run "$SCRIPT" upload --owner agent-a "$id" "$f"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"--force"* ]]
+  done
+  ! grep -q DOM. "$CDP_CALLS"
+}
+
+@test "upload refuses env files, token files, cloud and tool configs, and id_* keys" {
+  cdp_setup
+  id="$(open_tab agent-a r)"; chrome_has "$id" https://example.com/
+  export HOME="$TEST_DIR/home"
+  mkdir -p "$HOME/.kube" "$HOME/.docker" "$HOME/.config/gcloud" "$TEST_DIR/proj"
+  for f in "$TEST_DIR/proj/.env" "$TEST_DIR/proj/.env.local" "$TEST_DIR/proj/.git-credentials" \
+           "$TEST_DIR/proj/.npmrc" "$TEST_DIR/proj/.pgpass" "$HOME/.kube/config" "$HOME/.docker/config.json" \
+           "$HOME/.config/gcloud/credentials.db" "$TEST_DIR/proj/vault.kdbx" "$TEST_DIR/proj/id_rsa" "$TEST_DIR/proj/id_ed25519.pub"; do
+    echo s > "$f"
+    run "$SCRIPT" upload --owner agent-a "$id" "$f"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"refusing"* ]]
+  done
+}
+
+@test "upload refuses a symlink that points into ~/.ssh" {
+  cdp_setup
+  id="$(open_tab agent-a r)"; chrome_has "$id" https://example.com/
+  export HOME="$TEST_DIR/home"
+  mkdir -p "$HOME/.ssh"; echo secret > "$HOME/.ssh/id"
+  ln -s "$HOME/.ssh/id" "$TEST_DIR/innocent.txt"
+  run "$SCRIPT" upload --owner agent-a "$id" "$TEST_DIR/innocent.txt"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"refusing"* ]]
+}
+
+@test "upload refuses more secret paths, in any case, and hard links to them" {
+  cdp_setup
+  id="$(open_tab agent-a r)"; chrome_has "$id" https://example.com/
+  export HOME="$TEST_DIR/home"
+  mkdir -p "$HOME/.aws" "$HOME/.config/gh" "$TEST_DIR/x"
+  echo s > "$HOME/.netrc"; echo s > "$HOME/.aws/credentials"; echo s > "$HOME/.config/gh/hosts.yml"
+  echo s > "$TEST_DIR/x/SERVER.PEM"; echo s > "$TEST_DIR/x/a.key"; echo s > "$TEST_DIR/x/b.P12"
+  for f in "$HOME/.netrc" "$HOME/.aws/credentials" "$HOME/.config/gh/hosts.yml" "$TEST_DIR/x/SERVER.PEM" "$TEST_DIR/x/a.key" "$TEST_DIR/x/b.P12"; do
+    run "$SCRIPT" upload --owner agent-a "$id" "$f"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"refusing"* ]]
+  done
+  ln "$HOME/.netrc" "$TEST_DIR/x/plain.txt"
+  run "$SCRIPT" upload --owner agent-a "$id" "$TEST_DIR/x/plain.txt"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"refusing"* ]]
+}
+
+@test "upload --force sends a pem file" {
+  cdp_setup
+  cat > "$TEST_DIR/cdp" <<'STUB'
+#!/bin/bash
+echo "$1 $2 $3" >> "$CDP_CALLS"
+case "$2" in
+  DOM.getDocument) echo '{"root":{"nodeId":1}}' ;;
+  DOM.querySelector) echo '{"nodeId":7}' ;;
+  *) echo '{}' ;;
+esac
+STUB
+  id="$(open_tab agent-a r)"; chrome_has "$id" https://example.com/
+  echo cert > "$TEST_DIR/cert.pem"
+  run "$SCRIPT" upload --owner agent-a --force "$id" "$TEST_DIR/cert.pem"
+  [ "$status" -eq 0 ]
+  grep -q DOM.setFileInputFiles "$CDP_CALLS"
+}
