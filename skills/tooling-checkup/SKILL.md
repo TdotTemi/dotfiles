@@ -311,12 +311,12 @@ Read the last 7 days, per project and overall:
 python3 <skill-dir>/scripts/agent_time_review.py --days 7
 ```
 
-It wraps `agent-perf.mjs report --all --days 7 --json` and the
-`session-report` analyzer (tokens and hours). It prints the top 3 slowest
-recurring steps (2 or more calls) per project and overall, a `fix:` line for
-each step that matches a known safe fix, the change since the last checkup,
-and one speedup line per step that recurs in 2 or more sessions and costs
-1 min/day or more. A step repeated inside one session is not a task:
+It wraps `agent-perf.mjs report` and the `session-report` analyzer. It
+prints the top 3 recurring steps (2+ calls) per project and overall, a `fix:`
+line per known fix, the change since the last checkup, and one speedup line
+per step seen in 2+ sessions at 1+ min/day. A subagent the lead did not wait
+on gets a `background subagents` line and stays out of totals, ranking, and
+speedup lines. Each speedup line says what to do:
 
 | Line | Do this |
 |---|---|
