@@ -1,37 +1,84 @@
 <style>
-  .tc-wrap { font-family: var(--font-anthropic-sans); color: var(--color-fg); display: grid; gap: 24px; }
-  .tc-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
-  .tc-kpi { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: 8px; padding: 12px; }
-  .tc-kpi .tc-label { color: var(--color-fg-muted); font-size: 14px; }
-  .tc-kpi .tc-value { font-family: var(--font-anthropic-serif); font-size: 28px; }
-  .tc-verdict { font-size: 16px; line-height: 1.4; }
-  .tc-status-healthy { color: var(--color-ok); }
-  .tc-status-gaps { color: var(--color-warn); }
-  .tc-status-broken { color: var(--color-bad); }
-  .tc-chart { width: 100%; position: relative; }
-  .tc-chart h2, .tc-wrap h2 { font-size: 16px; margin: 0 0 8px; }
-  .tc-tip { position: absolute; pointer-events: none; background: var(--color-panel); border: 1px solid var(--color-border-line); padding: 4px 8px; border-radius: 4px; font-size: 14px; display: none; }
-  .tc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  .tc-table th, .tc-table td { text-align: left; padding: 6px; border-bottom: 1px solid var(--color-border-line); }
+  /* Hallmark · shape: app screen · genre: modern-minimal · theme: brand (host tokens) · redesign: full
+   * paper: host --color-panel · accent: host chart colours · display: host serif · body: host sans
+   * nav: none, a one-column board on phones, two columns of charts on desktop · signature: the verdict line over four ruled figures · states: loading, empty
+   * axes: host/host/host · posture: settled · contrast: pass · v2.0.0 */
+  /* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V4 · weakest: E, the charts are small; the figures and the table carry the same numbers */
+  :root {
+    --tc-fg: var(--color-fg);
+    --tc-muted: var(--color-fg-muted);
+    --tc-panel: var(--color-panel);
+    --tc-line: var(--color-border-line);
+    --tc-ok: var(--color-ok);
+    --tc-warn: var(--color-warn);
+    --tc-bad: var(--color-bad);
+    --tc-sans: var(--font-anthropic-sans);
+    --tc-serif: var(--font-anthropic-serif);
+    --tc-gap: 24px;
+    --tc-pad: 8px;
+  }
+  html, body { overflow-x: clip; }
+  .tc-wrap { font-family: var(--tc-sans); color: var(--tc-fg); display: grid; gap: var(--tc-gap); max-width: 1120px; margin-inline: 0; min-width: 0; }
+  .tc-wrap h2 { font-size: 16px; font-weight: 600; line-height: 1.3; margin: 0 0 var(--tc-pad); text-wrap: balance; overflow-wrap: break-word; min-width: 0; }
+  #tc-latest { display: grid; gap: 16px; padding-bottom: var(--tc-gap); border-bottom: 1px solid var(--tc-line); }
+  .tc-verdict { font-family: var(--tc-serif); font-size: 24px; line-height: 1.3; margin: 0; max-width: 60ch; text-wrap: pretty; overflow-wrap: break-word; }
+  .tc-verdict strong { font-weight: 600; }
+  .tc-status-healthy { color: var(--tc-ok); }
+  .tc-status-gaps { color: var(--tc-warn); }
+  .tc-status-broken { color: var(--tc-bad); }
+  .tc-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 16px; }
+  .tc-kpi { border-top: 2px solid var(--tc-fg); padding-top: var(--tc-pad); min-width: 0; }
+  .tc-kpi .tc-label { color: var(--tc-muted); font-size: 14px; line-height: 1.3; }
+  .tc-kpi .tc-value { font-family: var(--tc-serif); font-size: 32px; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .tc-chart { width: 100%; position: relative; min-width: 0; }
+  .tc-now { margin: 0 0 var(--tc-pad); font-size: 14px; color: var(--tc-muted); font-variant-numeric: tabular-nums; }
+  .tc-now:empty { display: none; }
+  .tc-plot { min-width: 0; }
+  .tc-plot svg:focus-visible { outline: 2px solid var(--tc-fg); outline-offset: 2px; }
+  .tc-plot svg { touch-action: pan-y; }
+  .tc-plot svg { display: block; max-width: 100%; height: auto; }
+  .tc-plot text { font-size: 14px; font-variant-numeric: tabular-nums; }
+  .tc-tip { position: absolute; pointer-events: none; background: var(--tc-panel); border: 1px solid var(--tc-line); padding: 4px 8px; border-radius: 4px; font-size: 14px; display: none; }
+  .tc-table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .tc-table th, .tc-table td { text-align: left; padding: 8px 4px; border-bottom: 1px solid var(--tc-line); vertical-align: top; }
+  .tc-table th { font-weight: 600; color: var(--tc-muted); }
+  .tc-table td[data-label="Verdict"] { overflow-wrap: anywhere; }
+  .tc-table tbody tr:last-child td { border-bottom: 0; }
+  .tc-table tr[hidden] { display: none; }
+  .tc-more { min-height: 44px; min-width: 44px; margin-top: var(--tc-pad); padding: 8px 16px; font: inherit; font-size: 14px; color: var(--tc-fg); background: var(--tc-panel); border: 1px solid var(--tc-line); border-radius: 4px; cursor: pointer; }
+  .tc-more:hover { border-color: var(--tc-fg); }
+  .tc-more:focus-visible { outline: 2px solid var(--tc-fg); outline-offset: 2px; }
+  @media (max-width: 639px) {
+    .tc-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .tc-table, .tc-table tbody, .tc-table tr, .tc-table td { display: block; }
+    .tc-table tr { padding: 8px 0; border-bottom: 1px solid var(--tc-line); }
+    .tc-table tr[hidden] { display: none; }
+    .tc-table td { display: grid; grid-template-columns: minmax(96px, 40%) minmax(0, 1fr); gap: 8px; border-bottom: 0; padding: 4px 0; }
+    .tc-table td::before { content: attr(data-label); color: var(--tc-muted); font-weight: 600; }
+  }
+  @media (min-width: 900px) {
+    .tc-wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
+    #tc-latest, #tc-runs { grid-column: 1 / -1; }
+  }
 </style>
 <div class="tc-wrap">
   <section id="tc-latest">
     <h2>Latest checkup</h2>
-    <p class="tc-verdict"><strong id="tc-status" data-source="latest" data-field="status" data-row="0">—</strong>:
-      <span data-source="latest" data-field="verdict" data-row="0">—</span>
-      (<span data-source="latest" data-field="time" data-row="0">—</span>)</p>
+    <p class="tc-verdict"><strong id="tc-status" data-source="latest" data-field="status" data-row="0">n/a</strong>:
+      <span data-source="latest" data-field="verdict" data-row="0">n/a</span>
+      (<span data-source="latest" data-field="time" data-row="0">n/a</span>)</p>
     <div class="tc-kpis">
-      <div class="tc-kpi"><div class="tc-label">Peak load1, 24 h</div><div class="tc-value" data-source="latest" data-field="machine_peak_load1_24h" data-row="0">—</div></div>
-      <div class="tc-kpi"><div class="tc-label">Overload rows, 24 h</div><div class="tc-value" data-source="latest" data-field="machine_overload_rows_24h" data-row="0">—</div></div>
-      <div class="tc-kpi"><div class="tc-label">Agent tool hours, 7 d</div><div class="tc-value" data-source="latest" data-field="agent_tool_hours_7d" data-row="0">—</div></div>
-      <div class="tc-kpi"><div class="tc-label">Claude echo p95, ms</div><div class="tc-value" data-source="latest" data-field="claude_echo_p95_ms" data-row="0">—</div></div>
+      <div class="tc-kpi"><div class="tc-label">Peak load1, 24 h</div><div class="tc-value" data-source="latest" data-field="machine_peak_load1_24h" data-row="0">n/a</div></div>
+      <div class="tc-kpi"><div class="tc-label">Overload rows, 24 h</div><div class="tc-value" data-source="latest" data-field="machine_overload_rows_24h" data-row="0">n/a</div></div>
+      <div class="tc-kpi"><div class="tc-label">Agent tool hours, 7 d</div><div class="tc-value" data-source="latest" data-field="agent_tool_hours_7d" data-row="0">n/a</div></div>
+      <div class="tc-kpi"><div class="tc-label">Claude echo p95, ms</div><div class="tc-value" data-source="latest" data-field="claude_echo_p95_ms" data-row="0">n/a</div></div>
     </div>
   </section>
-  <section class="tc-chart" id="tc-overload" data-source="runs"><h2>Overload rows per checkup</h2><div class="tc-plot"></div><div class="tc-tip"></div></section>
-  <section class="tc-chart" id="tc-gate" data-source="gate"><h2>dotfiles gate: median seconds per day</h2><div class="tc-plot"></div><div class="tc-tip"></div></section>
-  <section class="tc-chart" id="tc-doctor" data-source="doctor"><h2>dotfiles doctor: failing checks per day</h2><div class="tc-plot"></div><div class="tc-tip"></div></section>
-  <section class="tc-chart" id="tc-load" data-source="load"><h2>Machine load: peak load1 per hour, last 7 days (local time)</h2><div class="tc-plot"></div><div class="tc-tip"></div></section>
-  <section class="tc-chart" id="tc-agent" data-source="agent_time"><h2>Agent tool hours per day, last 14 days</h2><div class="tc-plot"></div><div class="tc-tip"></div></section>
+  <section class="tc-chart" id="tc-overload" data-source="runs"><h2>Overload rows per checkup</h2><p class="tc-now"></p><div class="tc-plot"></div><div class="tc-tip"></div></section>
+  <section class="tc-chart" id="tc-gate" data-source="gate"><h2>dotfiles gate: median seconds per day</h2><p class="tc-now"></p><div class="tc-plot"></div><div class="tc-tip"></div></section>
+  <section class="tc-chart" id="tc-doctor" data-source="doctor"><h2>dotfiles doctor: failing checks per day</h2><p class="tc-now"></p><div class="tc-plot"></div><div class="tc-tip"></div></section>
+  <section class="tc-chart" id="tc-load" data-source="load"><h2>Machine load: peak load1 per hour, last 7 days (local time)</h2><p class="tc-now"></p><div class="tc-plot"></div><div class="tc-tip"></div></section>
+  <section class="tc-chart" id="tc-agent" data-source="agent_time"><h2>Agent tool hours per day, last 14 days</h2><p class="tc-now"></p><div class="tc-plot"></div><div class="tc-tip"></div></section>
   <section id="tc-agent-projects">
     <h2>Agent tool hours by project, last 14 days</h2>
     <table class="tc-table" data-source="agent_time">
@@ -48,58 +95,144 @@
   </section>
 </div>
 <script>
+  var tcShow = function (v) { return v === null || v === undefined || v === '' ? 'n/a' : String(v); };
+  // 'YYYY-MM-DD' is a calendar day: build it as a local date so the point sits on its own tick label.
+  var tcIsDay = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v)); };
+  var tcDay = function (v) {
+    var m = v ? /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v)) : null;
+    if (!m) return null;
+    var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    // new Date rolls 2026-02-30 over to Mar 2: drop a day that does not round-trip.
+    return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3]) ? d : null;
+  };
+  var tcTime = function (v) { return v ? new Date(String(v)) : null; };
+  var tcHour = function (v) { return v ? new Date(String(v).slice(0, 13) + ':00:00') : null; };
+  var tcWhen = function (v) {
+    var d = tcIsDay(v) ? tcDay(v) : (v ? new Date(String(v)) : null);
+    if (!d || isNaN(+d)) return tcShow(v);
+    var day = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    return tcIsDay(v) ? day : day + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+  // dash.data(id) can return undefined before a dataset is attached: treat that as "no data" for that panel only.
+  var tcData = function (id) {
+    var d = dash.data(id);
+    return d && d.status === 'ok' && Array.isArray(d.data) ? d.data : [];
+  };
+
   function tcLine(id, rows, xKey, yKey, color, parseX) {
-    var box = document.querySelector('#' + id + ' .tc-plot');
-    var tip = document.querySelector('#' + id + ' .tc-tip');
-    box.textContent = '';
-    if (!rows.length) { box.textContent = '—'; return; }
-    var w = Math.max(box.clientWidth || 320, 280), h = 180, m = { t: 8, r: 12, b: 24, l: 40 };
+    var section = document.getElementById(id);
+    var box = section.querySelector('.tc-plot');
+    var tip = section.querySelector('.tc-tip');
+    var now = section.querySelector('.tc-now');
+    box.textContent = ''; now.textContent = ''; tip.style.display = 'none';
     var pts = rows.map(function (r) { return { x: parseX(r[xKey]), y: Number(r[yKey]), r: r }; })
-      .filter(function (p) { return p.x && !isNaN(p.y); });
+      .filter(function (p) { return p.x && !isNaN(+p.x) && !isNaN(p.y); });
+    if (!pts.length) { box.textContent = 'no data'; return; }
+    var w = Math.max(box.clientWidth || 320, 280), h = 180, m = { t: 8, r: 12, b: 24, l: 40 };
+    // Redraw when the panel width changes, so 14 px axis text is never scaled down by the viewBox.
+    section._tcRedraw = function () { tcLine(id, rows, xKey, yKey, color, parseX); };
+    var last = pts[pts.length - 1];
+    var lo = d3.min(pts, function (p) { return p.y; }), hi = d3.max(pts, function (p) { return p.y; });
+    now.textContent = 'Latest ' + last.y + ' on ' + tcWhen(last.r[xKey]);
     var x = d3.scaleTime().domain(d3.extent(pts, function (p) { return p.x; })).range([m.l, w - m.r]);
-    var y = d3.scaleLinear().domain([0, d3.max(pts, function (p) { return p.y; }) || 1]).nice().range([h - m.b, m.t]);
-    var svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', '0 0 ' + w + ' ' + h);
-    svg.append('g').attr('transform', 'translate(0,' + (h - m.b) + ')').call(d3.axisBottom(x).ticks(Math.min(6, pts.length)));
+    var y = d3.scaleLinear().domain([0, hi || 1]).nice().range([h - m.b, m.t]);
+    var svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', '0 0 ' + w + ' ' + h)
+      .attr('role', 'img').attr('tabindex', 0)
+      .attr('aria-label', section.querySelector('h2').textContent + ': latest ' + last.y + ' on ' + tcWhen(last.r[xKey]) + ', min ' + lo + ', max ' + hi + '. Arrow keys step through points.');
+    svg.append('g').attr('transform', 'translate(0,' + (h - m.b) + ')').call(d3.axisBottom(x).ticks(Math.min(w < 500 ? 3 : 6, pts.length)));
     svg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(4));
     svg.append('path').datum(pts).attr('fill', 'none').attr('stroke', color).attr('stroke-width', 2)
       .attr('d', d3.line().x(function (p) { return x(p.x); }).y(function (p) { return y(p.y); }));
     svg.selectAll('circle').data(pts).enter().append('circle').attr('r', 4).attr('fill', color)
-      .attr('cx', function (p) { return x(p.x); }).attr('cy', function (p) { return y(p.y); })
-      .on('mouseenter', function (e, p) {
-        tip.style.display = 'block';
-        tip.textContent = String(p.r[xKey]).slice(0, 16) + ': ' + p.y;
-        var left = Math.min(x(p.x) / w * box.clientWidth, box.clientWidth - 140);
-        tip.style.left = Math.max(0, left) + 'px'; tip.style.top = '24px';
-      })
-      .on('mouseleave', function () { tip.style.display = 'none'; });
+      .attr('cx', function (p) { return x(p.x); }).attr('cy', function (p) { return y(p.y); });
+    var mark = svg.append('circle').attr('r', 7).attr('fill', 'none').attr('stroke', 'currentColor').attr('stroke-width', 2).style('display', 'none');
+    tip.setAttribute('aria-live', 'polite');
+    var at = pts.length - 1;
+    function showAt(i) {
+      at = Math.max(0, Math.min(pts.length - 1, i));
+      var p = pts[at];
+      tip.style.display = 'block';
+      tip.textContent = tcWhen(p.r[xKey]) + ': ' + p.y;
+      var left = Math.min(x(p.x) / w * box.clientWidth, box.clientWidth - 140);
+      tip.style.left = Math.max(0, left) + 'px'; tip.style.top = '24px';
+      mark.style('display', null).attr('cx', x(p.x)).attr('cy', y(p.y));
+    }
+    function hide() { tip.style.display = 'none'; mark.style('display', 'none'); }
+    function nearest(e) {
+      var px = d3.pointer(e, svg.node())[0], best = 0;
+      pts.forEach(function (p, i) { if (Math.abs(x(p.x) - px) < Math.abs(x(pts[best].x) - px)) best = i; });
+      return best;
+    }
+    svg.on('pointerdown', function (e) { showAt(nearest(e)); })
+      .on('pointermove', function (e) { if (e.pointerType === 'mouse') showAt(nearest(e)); })
+      .on('pointerleave', function (e) { if (e.pointerType === 'mouse' && document.activeElement !== svg.node()) hide(); })
+      .on('focus', function () { showAt(at); })
+      .on('blur', hide)
+      .on('keydown', function (e) {
+        var k = { ArrowLeft: at - 1, ArrowRight: at + 1, Home: 0, End: pts.length - 1 }[e.key];
+        if (k !== undefined) { e.preventDefault(); showAt(k); }
+      });
   }
-  var tcDay = function (v) { return v ? new Date(String(v).slice(0, 10) + 'T00:00:00Z') : null; };
-  var tcTime = function (v) { return v ? new Date(String(v)) : null; };
-  var tcHour = function (v) { return v ? new Date(String(v).slice(0, 13) + ':00:00') : null; };
-  var tcShow = function (v) { return v === null || v === undefined || v === '' ? '—' : String(v); };
+  var tcLabel = function (table) {
+    var heads = Array.prototype.map.call(table.querySelectorAll('thead th'), function (th) { return th.textContent; });
+    // Phone CSS makes table parts display:block, which drops table semantics in Safari. Explicit roles keep them.
+    table.setAttribute('role', 'table');
+    table.querySelectorAll('thead tr, tbody tr').forEach(function (tr) { tr.setAttribute('role', 'row'); });
+    table.querySelectorAll('thead th').forEach(function (th) { th.setAttribute('role', 'columnheader'); });
+    table.querySelectorAll('tbody tr').forEach(function (tr) {
+      Array.prototype.forEach.call(tr.children, function (td, i) { td.setAttribute('data-label', heads[i] || ''); td.setAttribute('role', 'cell'); });
+    });
+  };
+  var tcCap = function (table, keep) {
+    var rows = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
+    var id = table.closest('section').id + '-more';
+    var old = document.getElementById(id);
+    if (old) old.remove();
+    if (rows.length <= keep) return;
+    rows.forEach(function (tr, i) { tr.hidden = i >= keep; });
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.id = id; btn.className = 'tc-more';
+    btn.textContent = 'Show ' + (rows.length - keep) + ' more';
+    btn.addEventListener('click', function () {
+      rows.forEach(function (tr) { tr.hidden = false; });
+      btn.remove();
+      // The button had focus: hand it to the first newly shown row so keyboard users keep their place.
+      rows[keep].setAttribute('tabindex', '-1');
+      rows[keep].focus();
+    });
+    table.parentNode.appendChild(btn);
+  };
+
+  var tcWidth = 0, tcTimer = null;
+  if (window.ResizeObserver) {
+    new ResizeObserver(function (entries) {
+      var w = Math.round(entries[0].contentRect.width);
+      if (w === tcWidth) return;
+      tcWidth = w;
+      clearTimeout(tcTimer);
+      tcTimer = setTimeout(function () {
+        document.querySelectorAll('.tc-chart').forEach(function (sec) { if (sec._tcRedraw) sec._tcRedraw(); });
+      }, 150);
+    }).observe(document.querySelector('.tc-wrap'));
+  }
 
   dash.onData(function () {
-    var latest = dash.data('latest');
-    var row = latest.status === 'ok' && latest.data.length ? latest.data[0] : null;
+    var latestRows = tcData('latest');
+    var row = latestRows.length ? latestRows[0] : null;
     document.querySelectorAll('[data-source="latest"]').forEach(function (el) {
-      el.textContent = row ? tcShow(row[el.getAttribute('data-field')]) : '—';
+      var f = el.getAttribute('data-field');
+      el.textContent = row ? (f === 'time' ? tcWhen(row[f]) : tcShow(row[f])) : 'n/a';
     });
     var status = document.getElementById('tc-status');
     status.className = row ? 'tc-status-' + row.status : '';
 
-    var runs = dash.data('runs');
-    var runRows = runs.status === 'ok' ? runs.data : [];
+    var runRows = tcData('runs');
     tcLine('tc-overload', runRows, 'time', 'machine_overload_rows_24h', dash.colors[0], tcTime);
-    var gate = dash.data('gate');
-    tcLine('tc-gate', gate.status === 'ok' ? gate.data : [], 'day', 'median_total_s', dash.colors[1], tcDay);
-    var doctor = dash.data('doctor');
-    tcLine('tc-doctor', doctor.status === 'ok' ? doctor.data : [], 'day', 'fail', dash.colors[2], tcDay);
+    tcLine('tc-gate', tcData('gate'), 'day', 'median_total_s', dash.colors[1], tcDay);
+    tcLine('tc-doctor', tcData('doctor'), 'day', 'fail', dash.colors[2], tcDay);
+    tcLine('tc-load', tcData('load'), 'hour', 'peak_load1', dash.colors[3], tcHour);
 
-    var load = dash.data('load');
-    tcLine('tc-load', load.status === 'ok' ? load.data : [], 'hour', 'peak_load1', dash.colors[3], tcHour);
-
-    var agent = dash.data('agent_time');
-    var agentRows = agent.status === 'ok' ? agent.data : [];
+    var agentRows = tcData('agent_time');
     var perDay = {}, perProject = {};
     agentRows.forEach(function (r) {
       perDay[r.day] = (perDay[r.day] || 0) + Number(r.tool_hours || 0);
@@ -118,15 +251,18 @@
       });
       pbody.appendChild(tr);
     });
+    tcLabel(pbody.closest('table'));
 
     var tbody = document.querySelector('#tc-runs tbody');
     tbody.textContent = '';
     runRows.slice().reverse().forEach(function (r) {
       var tr = document.createElement('tr');
       ['time', 'status', 'machine_overload_rows_24h', 'agent_tool_hours_7d', 'verdict'].forEach(function (k) {
-        var td = document.createElement('td'); td.textContent = tcShow(r[k]); tr.appendChild(td);
+        var td = document.createElement('td'); td.textContent = k === 'time' ? tcWhen(r[k]) : tcShow(r[k]); tr.appendChild(td);
       });
       tbody.appendChild(tr);
     });
+    tcLabel(tbody.closest('table'));
+    tcCap(tbody.closest('table'), 5);
   });
 </script>

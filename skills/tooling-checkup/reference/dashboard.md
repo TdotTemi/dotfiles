@@ -45,3 +45,30 @@ private-pattern file (`~/.config/oss-readiness/oss-readiness.env`) with
 dropped from `latest`. `agent_time` names only the tooling projects
 (agentbrew, dotfiles, minsky, taskgrind, tasks.md, tooling); every other
 project is grouped as `other`, so private repo names never reach the page. Anyone who can open the dashboard can read the files.
+
+## Design
+
+`dashboard/index.html` is built with the Hallmark design skill (redesign, app
+screen scope) and the `ui-ux-rankings` comfort budget. The host Dashboard type
+owns the `--color-*` and `--font-*` tokens; the page maps them to `--tc-*`
+tokens at `:root` and sets no literal colour. Check it with
+`node ~/.claude/skills/hallmark/scripts/sloplint.mjs skills/tooling-checkup/dashboard/index.html --genre modern-minimal --scope app`.
+The render tier needs `puppeteer-core`; without it, check the page in a stub
+host (fixture `dash` object, d3, light and dark tokens) with Playwright.
+
+Comfort gate: `NODE_PATH=<dir with playwright, axe-core, d3> node scripts/dashboard_comfort.cjs <index.html> <prefix>`
+(run it as `heavy-run`). It renders the page on phone and desktop, light and
+dark, with reduced motion, and exits 1 on a serious axe issue, text under 14
+px, a touch target under 44 px, sideways overflow, a word split inside a table
+cell, a table part without its ARIA role (`table`, `row`, `columnheader`, `cell`), more than 5 run rows before "Show N more", a chart without `role="img"`,
+an `aria-label` with latest, min and max, a visible latest value, or a tooltip
+on focus and tap, or a missing dataset that stops other panels drawing.
+Overflow is measured with `scrollWidth > clientWidth` on the document and each
+panel, and by every element's right edge, so `overflow-x: clip` (which Hallmark
+requires on `html` and `body`) cannot hide it. The fixture holds a word wider
+than a phone cell. The `load` fixture matches the exporter: one row per hour
+over 7 days, `YYYY-MM-DDTHH:00`.
+
+`tests/tooling-checkup-dashboard.bats` runs the gate, plants an overflow and a
+break-anywhere rule to prove it fails on each, and skips when Playwright,
+axe-core or d3 are missing, with a visible SKIPPED line. It looks in `DASHBOARD_NODE_PATH`, `NODE_PATH`, then the cache folder `~/.cache/dotfiles/dashboard-gate/node_modules`. Install once with `npm i --prefix ~/.cache/dotfiles/dashboard-gate playwright@1.64.1 axe-core@4.14.0 d3@7.9.0`.

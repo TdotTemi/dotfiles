@@ -43,26 +43,6 @@ them. -->
 
 ## P2
 
-- [ ] Rebuild the UI to the Hallmark design skill
-  - **ID**: hallmark-design
-  - **Details**: The owner chose Hallmark (nutlope/hallmark, installed through agentbrew on
-    2026-10-27) as the design skill for every app with a UI. Run `/hallmark audit skills/tooling-checkup/dashboard/index.html` first
-    and save its report. Then `/hallmark redesign skills/tooling-checkup/dashboard/index.html`: it keeps content and wiring and
-    changes only the look. Keep the comfort budget from `ui-ux-rankings`
-    (references/comfort-patterns.md) as the floor, and keep every existing UI test green.
-  - **Files**: `skills/tooling-checkup/dashboard/index.html`
-  - **Acceptance**: the Hallmark audit reports no Floor failures and no Reflex gate left
-    without a recorded reason; the `ui-ux-rankings` comfort gates still pass on phone and
-    desktop, light and dark; before/after screenshots in the PR.
-  - **Hypothesis**: Hallmark Floor and Reflex findings on `skills/tooling-checkup/dashboard/index.html` drop from the audit baseline
-    to 0 open, with no comfort-budget regression.
-  - **Measurement**: `/hallmark audit skills/tooling-checkup/dashboard/index.html` (count of Floor + Reflex findings) plus the repo's
-    `ui-ux-rankings` gate.
-  - **Success**: 0 Floor findings, every Reflex finding fixed or overruled with a reason.
-  - **Pivot**: the redesign breaks a comfort gate or an everyday job takes more taps: keep the
-    audit fixes only and drop the redesign.
-  - **Anchor**: Nielsen 1994 (heuristic evaluation).
-
 - [ ] Record each real install run so the README can prove one-command setup
   - **ID**: proof-install-field-outcome
   - **Tags**: metrics, proof
@@ -138,6 +118,14 @@ them. -->
   - **Competitive-goal**: none — machine stability for agent work (docs/metrics.md), not a scorecard metric.
 
 ## P3
+
+- [ ] Harden the tooling-checkup dashboard chart checks (round-2 review of dotfiles #379)
+  - **ID**: dashboard-chart-gate-hardening
+  - **Tags**: ui, tooling-checkup
+  - **Details**: Four leftovers from the round-2 review of the Hallmark dashboard redesign. (1) The load chart can show a duplicate or a missing local hour on a daylight-saving change, because the exporter keys rows by local time: key them by UTC and format in the page. (2) The gate's tap test uses a mouse click, not `touchscreen.tap`. (3) The gate presses ArrowLeft but never checks that the tooltip moved. (4) Chart line colours (non-text contrast, WCAG 1.4.11) are not gated.
+  - **Files**: `skills/tooling-checkup/scripts/dashboard_export.py`, `skills/tooling-checkup/dashboard/index.html`, `skills/tooling-checkup/scripts/dashboard_comfort.cjs`, `tests/tooling-checkup-dashboard.bats`
+  - **Output**: code
+  - **Acceptance**: a fixture with a spring-forward and a fall-back week draws 168 distinct hours; the gate taps with `touchscreen.tap`, asserts the tooltip text changes after ArrowLeft, and fails on a chart line under 3:1 against the panel in light and dark.
 
 - [ ] Make `make lint` fast in the inner loop
   - **ID**: speed-up-make-lint
