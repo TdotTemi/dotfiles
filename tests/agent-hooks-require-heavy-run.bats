@@ -106,6 +106,74 @@ run_hook() {
   done
 }
 
+@test "blocks npx and npm exec with flags and version suffixes, and node_modules/.bin paths" {
+  for c in "npx -y playwright@1 test" "npx --yes playwright@1.40.0 test" "npx -y vitest@2 run" \
+           "npm exec -y playwright test" "npm exec --yes -- playwright test" "npm exec -p playwright playwright test" \
+           "pnpm dlx playwright@1 test" "pnpm exec -- playwright test" \
+           "./node_modules/.bin/playwright test" "node_modules/.bin/vitest run" "/usr/bin/make e2e"; do
+    run_hook "$c"
+    [ "$status" -eq 2 ] || { echo "not blocked: $c"; return 1; }
+  done
+}
+
+@test "blocks bun, turbo, and gmake" {
+  for c in "bun test" "bun run test" "bun run e2e" "bun x playwright test" "bunx -y playwright@1 test" \
+           "turbo run test" "turbo test" "turbo run build --filter=web" "turbo run e2e" "gmake e2e" "gmake test-all"; do
+    run_hook "$c"
+    [ "$status" -eq 2 ] || { echo "not blocked: $c"; return 1; }
+  done
+}
+
+@test "blocks bash -c and sh -c strings, and command substitution inside a word" {
+  for c in 'bash -c "make e2e"' "sh -c 'npm test'" 'bash -lc "cd app && yarn test"' 'sudo bash -c "make e2e"' \
+           'zsh -c "bun run e2e"' 'bash -c "bash -c \"make e2e\""' \
+           'make -j$(nproc) e2e' 'make -j`nproc` e2e' 'make -j"$(nproc)" e2e' 'make -j$(sysctl -n hw.ncpu) test-all'; do
+    run_hook "$c"
+    [ "$status" -eq 2 ] || { echo "not blocked: $c"; return 1; }
+  done
+}
+
+@test "blocks vitest, jest, and turbo behind exec, dlx, and bun x" {
+  for c in "pnpm exec vitest" "npm exec -- jest" "pnpm dlx vitest" "bun x vitest" "pnpm exec turbo run test" \
+           "yarn dlx vitest run" "npm exec -y vitest@2 run"; do
+    run_hook "$c"
+    [ "$status" -eq 2 ] || { echo "not blocked: $c"; return 1; }
+  done
+  for c in "pnpm exec vitest run src/a.test.ts" "npm exec -- jest src/x.test.js" "pnpm exec turbo run lint" \
+           "heavy-run pnpm exec vitest" "pnpm exec prettier --check ."; do
+    run_hook "$c"
+    [ "$status" -eq 0 ] || { echo "blocked: $c ($output)"; return 1; }
+  done
+}
+
+@test "blocks bash -c behind timeout, nice, caffeinate, and shell flags with values" {
+  for c in 'timeout 600 bash -c "make e2e"' 'nice -n 5 bash -c "make e2e"' 'caffeinate -i bash -c "make e2e"' \
+           'bash -euo pipefail -c "make e2e"' 'timeout -s KILL 600 sh -c "npm test"'; do
+    run_hook "$c"
+    [ "$status" -eq 2 ] || { echo "not blocked: $c"; return 1; }
+  done
+  for c in 'timeout 600 bash -c "heavy-run make e2e"' 'nice -n 5 bash -c "heavy-run make e2e"' \
+           'caffeinate -i bash -c "heavy-run make e2e"' 'bash -euo pipefail -c "heavy-run make e2e"' \
+           'timeout 600 bash -c "echo hi"'; do
+    run_hook "$c"
+    [ "$status" -eq 0 ] || { echo "blocked: $c ($output)"; return 1; }
+  done
+}
+
+@test "allows the new forms under heavy-run and their single-test runs" {
+  for c in "heavy-run npx -y playwright@1 test" "heavy-run npm exec -y playwright test" \
+           "heavy-run ./node_modules/.bin/playwright test" "~/bin/heavy-run make e2e" "heavy-run bun test" \
+           "heavy-run turbo run test" "heavy-run gmake e2e" 'bash -c "heavy-run make e2e"' "sh -c 'heavy-run npm test'" \
+           'heavy-run make -j$(nproc) e2e' \
+           "npx -y playwright@1 test -g login" "npx -y vitest@2 run src/a.test.ts" "./node_modules/.bin/playwright test tests/a.spec.ts" \
+           "bun test src/a.test.ts" "turbo run lint" "bun install" "npx -y prettier@3 --check ." \
+           'bash -c "echo hi"' 'git commit -m "run bash -c \"make e2e\" later"' 'echo "x; bash -c \"make e2e\""' \
+           'make -j$(nproc) lint' 'echo $(date)'; do
+    run_hook "$c"
+    [ "$status" -eq 0 ] || { echo "blocked: $c ($output)"; return 1; }
+  done
+}
+
 @test "HEAVY_RUN_HOOK=off turns the hook off" {
   json='{"tool_input":{"command":"npm test"}}'
   run env HEAVY_RUN_HOOK=off bash -c 'printf "%s" "$1" | '"$HOOK" _ "$json"
