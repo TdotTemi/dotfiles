@@ -29,6 +29,20 @@ them. -->
 
 ## P2
 
+- [ ] Branch-delete hook misses `git -C <dir> branch` with the force flag
+  - **ID**: block-dangerous-git-dash-c-bypass
+  - **Tags**: safety, agents, hooks
+  - **Details**: `agent-hooks/block-dangerous-git.sh` matches the literal text `git branch -D`. A command such as `git -C <dir> branch -D <b>` does not contain that text, so the hook never sees it and the force-delete runs with no merged-branch proof. The probe in review of the merged-branch change showed rc=0 for it. The same gap applies to `git --git-dir=... branch -D`, to `-d -f`, `--delete --force`, `-fd`, `git branch x -D`, and a double space before the flag. Close it by detecting any `git` call whose subcommand is `branch` with a force-delete flag (including `-C`, `--git-dir`, `--work-tree`, and `-c` options before the subcommand), then apply the same rule as today: allow only when the branch is proven merged, in the repo the command acts on.
+  - **Files**: `agent-hooks/block-dangerous-git.sh`, `tests/agent-hooks-block-dangerous-git-merged.bats`, `docs/agent-hooks.md`
+  - **Output**: code
+  - **Acceptance**: `git -C <repo> branch -D <unmerged>` and `git --git-dir=<repo>/.git branch -D <unmerged>` exit 2; the same command for a branch proven merged in `<repo>` exits 0; the existing cases keep their results.
+  - **Hypothesis**: matching the force-delete by parsed subcommand instead of literal text cuts the number of probe commands that delete an unmerged branch without a block from the current 3 (the `-C`, `--git-dir`, and long-flag forms) to 0, because the hook then sees every spelling.
+  - **Measurement**: `bats tests/agent-hooks-block-dangerous-git-merged.bats` with the new probe cases; each case counts as a pass when an unmerged branch exits 2.
+  - **Success**: 0 of the probe spellings delete an unmerged branch, and all existing hook tests still pass.
+  - **Pivot**: if the parsed match blocks more than 2 legitimate non-delete `git branch` commands in the test matrix, drop the parser and block every `git` call that has `branch` and a force flag in the same segment.
+  - **Anchor**: Saltzer and Schroeder 1975, "The Protection of Information in Computer Systems" (fail-safe defaults, complete mediation); OWASP Command Injection Prevention (deny-list gaps).
+  - **Competitive-goal**: none — agent safety hardening, not a scorecard metric.
+
 - [ ] Record each real install run so the README can prove one-command setup
   - **ID**: proof-install-field-outcome
   - **Tags**: metrics, proof
@@ -98,6 +112,15 @@ them. -->
   - **Files**: `skills/tooling-checkup/scripts/dashboard_export.py`, `skills/tooling-checkup/dashboard/index.html`, `skills/tooling-checkup/scripts/dashboard_comfort.cjs`, `tests/tooling-checkup-dashboard.bats`
   - **Output**: code
   - **Acceptance**: a fixture with a spring-forward and a fall-back week draws 168 distinct hours; the gate taps with `touchscreen.tap`, asserts the tooltip text changes after ArrowLeft, and fails on a chart line under 3:1 against the panel in light and dark.
+
+- [ ] Tighten the perl alarm guard test
+  - **ID**: perl-alarm-guard-gaps
+  - **Tags**: tests, reliability
+  - **Details**: Two gaps in `tests/perl-alarm.bats`, found in review of the SIGALRM fix. (1) The guard greps one line at a time, so a multi-line `perl -e '...'` that calls `alarm` without resetting the handler is not caught. (2) The guard skips all of `tests/morning.bats`, but only its perl stub lines need to be skipped.
+  - **Files**: `tests/perl-alarm.bats`
+  - **Output**: code
+  - **Acceptance**: a fixture with a multi-line `perl -e` that arms `alarm` and has no reset makes the guard fail; the guard still passes on the repo; the skip covers only the stub lines of `tests/morning.bats`, so a bad `alarm` line elsewhere in that file fails the guard.
+  - **Competitive-goal**: none — test hardening, not a scorecard metric.
 
 - [ ] Make `make lint` fast in the inner loop
   - **ID**: speed-up-make-lint
