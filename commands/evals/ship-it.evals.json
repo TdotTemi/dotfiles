@@ -228,6 +228,16 @@
         "Uses the real running app in a deployed test environment, not a component sandbox such as Storybook",
         "Does not commit the screenshots"
       ]
+    },
+    {
+      "id": 21,
+      "prompt": "A reviewer comments on my open PR: 'add a filter dropdown above the table'. The PR description links a Figma frame for this page. Handle the comment with /ship-it.",
+      "expected_output": "The agent opens the linked Figma frame before building and builds the filter UI the design shows. If the design has no dropdown or differs from the comment, it drafts a question to the reviewer and posts it only after the user says yes.",
+      "expectations": [
+        "Opens the linked design before writing UI code",
+        "Builds what the design shows, not only the comment's wording",
+        "When no design is linked or the design and the comment disagree, drafts a question to the reviewer and posts it only on the user's yes"
+      ]
     }
   ]
 }
