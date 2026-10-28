@@ -192,6 +192,42 @@ Some hosts enforce `required_pull_request_reviews`. Behavior depends on **§ Rep
 
 **Contrast with own-tool repos:** In `~/apps/tooling/**` (`agentbrew`, `dotfiles`, `tasks-md`, `minsky`), cascade step 2 (`--admin`) or step 5 (GraphQL) is usually the completion path when `reviewDecision: REVIEW_REQUIRED` is the only blocker.
 
+## Setting branch protection
+
+Before you set branch protection, read two things:
+
+```bash
+gh api repos/{owner}/{repo}/actions/permissions --jq .enabled
+gh api repos/{owner}/{repo}/actions/runs --jq '.workflow_runs[:5][].id'
+gh api repos/{owner}/{repo}/commits/<sha>/check-runs --jq '.check_runs[].name'
+```
+
+The `enabled` field says if Actions is on. The latest runs and their
+check-runs give the exact check names to require.
+
+- **Actions on, checks reported:** require those check names.
+- **Actions off, or no check ever reported:** require a PR review only. A
+  required check that never runs blocks every PR forever. Note in
+  CONTRIBUTING that contributors run the checks themselves.
+- **Always:** send `enforce_admins: false` explicitly, so a standing
+  bypass-merge rule still works.
+
+```bash
+gh api -X PUT repos/{owner}/{repo}/branches/<branch>/protection --input - <<'JSON'
+{
+  "required_status_checks": null,
+  "enforce_admins": false,
+  "required_pull_request_reviews": {"required_approving_review_count": 1},
+  "restrictions": null
+}
+JSON
+gh api repos/{owner}/{repo}/branches/<branch>/protection --jq .enforce_admins.enabled
+```
+
+With reported checks, set `required_status_checks` to
+`{"strict": false, "contexts": ["<check name>"]}` instead of `null`. The
+verify read must print `false`.
+
 ## Bypass merge cascade (mandatory under `/ship-it` when `BYPASS_ALLOWED=true`)
 
 When `BYPASS_ALLOWED=true` and a session-owned PR has green substantive checks and `reviewDecision: REVIEW_REQUIRED`, ship-it mode **MUST run every step below** before treating review as irreducible. **Never stop** after the first `REVIEW_REQUIRED` from `gh pr merge --admin` — continue through self-approve, GraphQL, and REST. Record each command and its stderr/JSON error in the delivery report.
@@ -636,13 +672,46 @@ Before handoff or merge, attach visual proof to every PR.
    is available.
 4. Do not commit images, request bodies with secrets, session data, or customer
    data. Redact secrets from a transcript the same way.
-5. Open the PR in the browser. Drag and drop the images into the PR
-   description. Do not add local image paths or fake image links. A transcript
-   is pasted directly, so it needs no upload.
+5. Attach each image with the CDP comment-box upload (default, no focus
+   change). Do not add local image paths or fake image links. A transcript is
+   pasted directly, so it needs no upload. See "Upload proof images over CDP"
+   below. Dragging into the PR description by hand is the fallback.
 6. Add `## Visual proof` to the description. For each image or transcript,
    state the case, action, expected result, and observed result.
 7. A screenshot of a dashboard does not prove a state change or a network call.
    Capture the relevant request or output too.
+
+### Upload proof images over CDP
+
+This is the default non-interactive way to attach an image. It works on
+github.com and on a GitHub Enterprise host.
+
+1. Connect over CDP to the signed-in agents Chrome on port `9223`.
+2. Open the PR in a background tab. Do not front it. Never call
+   `page.bringToFront()` or any focus API.
+3. Call `setInputFiles` on the comment box `input[type=file]`.
+4. Read the inserted markdown from `#new_comment_field`. It looks like
+   `<img ... src=".../user-attachments/assets/...">`.
+5. Clear the box, then close the background tab so no draft survives.
+   **Never submit the comment.**
+6. Put the tag under `## Visual proof` and run
+   `gh pr edit <n> --body-file <file>`.
+
+Before you upload, redact or skip any screenshot that shows private,
+personal, customer or employer data. Upload only images that are
+safe to make public, because the attachment URL is reachable even if the
+comment is never sent.
+
+### Scripts-only lockfile gate
+
+When a repo gate rejects `package.json` without a lockfile change, run
+`git diff -- package.json` and confirm it touches only `scripts`. Then it is a
+gate false positive. Fix the gate in that repo, or file a task. Never add an empty
+lockfile change to pass it.
+
+Limit: a script that installs a package, or adds a `postinstall` or
+`npx <new pkg>` call, is not a false positive. Treat it as a real dependency
+change.
 
 ### Never stage a terminal image with GUI automation
 
