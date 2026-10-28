@@ -5,6 +5,16 @@
 # full suites, e2e runs, and timing runs queue instead of piling up.
 # $TMPDIR is not used: sandboxed sessions can see different temp dirs.
 #
+# Waiters are served in arrival order. Each caller takes a numbered ticket
+# file in $dir/queue (numbers come from $dir/seq under a short flock) and holds
+# an flock on that file while it waits. Only the lowest live ticket tries for
+# the lock. A ticket nobody holds (its owner died, even by SIGKILL) is deleted
+# by the next waiter; liveness never depends on a pid. If the queue folder is
+# unusable, heavy-run warns once and uses the plain lock. Each run appends
+# "waited=<seconds>" to the wait log (skipped if its folder cannot be made).
+# Known limits: a stopped (Ctrl-Z) waiter at the head blocks the queue until it
+# resumes; callers on the fallback path or an old binary can overtake the head.
+#
 # A perl parent holds an flock (fd closed on exec, so no child or leftover
 # daemon inherits it), runs the command, forwards TERM/INT/HUP to it, and
 # exits with its status. The lock lasts exactly as long as the command.
@@ -17,12 +27,18 @@
 # Env:
 #   HEAVY_RUN_DIR   lock folder (default ~/.local/state/heavy-run)
 #   HEAVY_RUN_NICE  nice level (default 15)
+#   HEAVY_RUN_WAIT_LOG  wait log (default ~/.local/state/dotfiles/heavy-run-waits.log,
+#                   or $HEAVY_RUN_DIR/waits.log when HEAVY_RUN_DIR is set)
 
 set -euo pipefail
 
 dir="${HEAVY_RUN_DIR:-$HOME/.local/state/heavy-run}"
 lock="$dir/lock"
 owner="$dir/owner"
+queue="$dir/queue"
+if [ -n "${HEAVY_RUN_WAIT_LOG:-}" ]; then waitlog="$HEAVY_RUN_WAIT_LOG"
+elif [ -n "${HEAVY_RUN_DIR:-}" ]; then waitlog="$dir/waits.log"
+else waitlog="$HOME/.local/state/dotfiles/heavy-run-waits.log"; fi
 level="${HEAVY_RUN_NICE:-15}"
 
 usage() {
@@ -36,12 +52,21 @@ case "${1:-}" in
     exit 2
     ;;
   --status)
-    if [ ! -e "$lock" ]; then echo "free"; exit 0; fi
-    if perl -e 'use Fcntl qw(:flock); open(my $f, "<", $ARGV[0]) or exit 0; exit(flock($f, LOCK_EX | LOCK_NB) ? 0 : 1)' "$lock"; then
+    if [ ! -e "$lock" ] || perl -e 'use Fcntl qw(:flock); open(my $f, "<", $ARGV[0]) or exit 0; exit(flock($f, LOCK_EX | LOCK_NB) ? 0 : 1)' "$lock"; then
       echo "free"
     else
       echo "held: $(cat "$owner" 2>/dev/null)"
     fi
+    perl -e '
+      use Fcntl qw(:flock);
+      opendir(my $d, $ARGV[0]) or exit 0;
+      my $n = 0;
+      for my $t (sort grep { /^\d+-\d+$/ } readdir $d) {
+        open(my $h, "<", "$ARGV[0]/$t") or next;
+        next if flock($h, LOCK_EX | LOCK_NB);
+        my $l = <$h> // ""; chomp $l;
+        printf "queue %d: %s\n", ++$n, $l;
+      }' "$queue"
     exit 0
     ;;
 esac
@@ -52,19 +77,84 @@ esac
 
 # Already inside a heavy-run that still holds the lock: run at once.
 # A leftover daemon keeps HEAVY_RUN_HELD after the run ends, so check the lock.
-if [ "${HEAVY_RUN_HELD:-}" = "$lock" ] && [ "$("$0" --status)" != "free" ]; then
+if [ "${HEAVY_RUN_HELD:-}" = "$lock" ] && [ "$("$0" --status | sed -n 1p)" != "free" ]; then
   exec "$@"
 fi
 
 mkdir -p "$dir"
+mkdir -p "$(dirname "$waitlog")" 2>/dev/null || true
 export HEAVY_RUN_HELD="$lock"
 
 exec perl -e '
   use Fcntl qw(:flock);
   use POSIX ();
-  my ($lock, $owner, $level, @cmd) = @ARGV;
-  open(my $fh, ">>", $lock) or die "heavy-run: cannot open $lock: $!\n";
-  flock($fh, LOCK_EX) or die "heavy-run: cannot lock $lock: $!\n";
+  use Fcntl qw(O_RDWR O_CREAT);
+  my ($lock, $owner, $level, $queue, $seqfile, $waitlog, @cmd) = @ARGV;
+  my $t0 = time;
+  my ($ticket, $tfh, $name);
+  # Take the next ticket number. The ticket is written and locked under a
+  # temporary name, then renamed, so no sweeper sees it before it is locked.
+  my $queued = eval {
+    -d $queue or mkdir $queue or die "cannot create $queue: $!\n";
+    sysopen(my $sf, $seqfile, O_RDWR | O_CREAT) or die "cannot open $seqfile: $!\n";
+    flock($sf, LOCK_EX) or die "cannot lock $seqfile: $!\n";
+    my $max = scalar <$sf> // 0; $max = 0 unless $max =~ /^\d+/;
+    if (opendir(my $qd, $queue)) {
+      for my $t (readdir $qd) { $max = $1 + 0 if $t =~ /^(\d+)-\d+$/ && $1 + 0 > $max; }
+      closedir $qd;
+    }
+    my $n = $max + 1;
+    seek($sf, 0, 0); truncate($sf, 0); print $sf "$n\n"; $sf->flush;
+    my $tmp = "$queue/.new-$$";
+    open($tfh, ">", $tmp) or die "cannot create $tmp: $!\n";
+    flock($tfh, LOCK_EX) or die "cannot lock $tmp: $!\n";
+    printf $tfh "pid=%d cwd=%s cmd=%s\n", $$, $ENV{PWD} // "", join(" ", @cmd);
+    $tfh->flush;
+    $name = sprintf("%010d-%d", $n, $$);
+    rename($tmp, "$queue/$name") or do { unlink $tmp; die "cannot rename $tmp: $!\n" };
+    $ticket = "$queue/$name";
+    close $sf;
+    1;
+  };
+  if (!$queued) { my $e = $@; chomp $e; print STDERR "heavy-run: queue unavailable ($e); using the plain lock\n"; }
+  if ($ticket) {
+    # A waiter stopped before it holds the lock takes its ticket with it.
+    my %signo = (TERM => 15, INT => 2, HUP => 1);
+    for my $sig (keys %signo) { $SIG{$sig} = sub { unlink $ticket; exit(128 + $signo{$sig}) }; }
+    # Wait until our ticket is the lowest live one. A ticket nobody holds is stale.
+    while (1) {
+      my $first;
+      if (opendir(my $qd, $queue)) {
+        my @all = readdir $qd;
+        # A temp ticket nobody holds (and older than 5 s) is a leftover.
+        for my $t (grep { /^\.new-\d+$/ } @all) {
+          next if $t eq ".new-$$";
+          next unless open(my $xf, "<", "$queue/$t");
+          next if time - (stat $xf)[9] < 5;
+          unlink "$queue/$t" if flock($xf, LOCK_EX | LOCK_NB);
+        }
+        for my $t (sort grep { /^\d+-\d+$/ } @all) {
+          if ($t ne $name) {
+            open(my $xf, "<", "$queue/$t") or next;
+            if (flock($xf, LOCK_EX | LOCK_NB)) { unlink "$queue/$t"; next; }
+          }
+          $first = $t; last;
+        }
+        closedir $qd;
+      }
+      last if !defined $first || $first eq $name;
+      select(undef, undef, undef, 0.2);
+    }
+  }
+  open(my $fh, ">>", $lock) or do { unlink $ticket if $ticket; die "heavy-run: cannot open $lock: $!\n"; };
+  flock($fh, LOCK_EX) or do { unlink $ticket if $ticket; die "heavy-run: cannot lock $lock: $!\n"; };
+  if ($ticket) { unlink $ticket; close $tfh; }
+  for my $sig (qw(TERM INT HUP)) { $SIG{$sig} = "DEFAULT"; }
+  if (open(my $wl, ">>", $waitlog)) {
+    my @lt = localtime;
+    printf $wl "%04d-%02d-%02dT%02d:%02d:%02d waited=%d pid=%d\n", $lt[5] + 1900, $lt[4] + 1, @lt[3,2,1,0], time - $t0, $$;
+    close $wl;
+  }
   # Block signals across fork so none can kill the parent before it forwards.
   my $set = POSIX::SigSet->new(POSIX::SIGTERM(), POSIX::SIGINT(), POSIX::SIGHUP());
   POSIX::sigprocmask(POSIX::SIG_BLOCK(), $set);
@@ -84,4 +174,4 @@ exec perl -e '
   my $st = $?;
   truncate($owner, 0);
   exit(POSIX::WIFSIGNALED($st) ? 128 + POSIX::WTERMSIG($st) : POSIX::WEXITSTATUS($st));
-' "$lock" "$owner" "$level" "$@"
+' "$lock" "$owner" "$level" "$queue" "$dir/seq" "$waitlog" "$@"

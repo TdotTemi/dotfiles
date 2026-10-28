@@ -124,3 +124,184 @@ wait_held() {
   HEAVY_RUN_HELD="$HEAVY_RUN_DIR/lock" run "$SCRIPT" sh -c "'$SCRIPT' --status"
   [[ "$output" == held:* ]]
 }
+
+# Wait up to 5 s until --status lists $1 live queue entries.
+wait_queued() {
+  local i
+  for i in $(seq 50); do
+    [ "$("$SCRIPT" --status | grep -c '^queue ')" -ge "$1" ] && return 0
+    sleep 0.1
+  done
+  return 1
+}
+
+# Hold a live ticket (an flock on its file) without taking the lock; the pid
+# is $FAKE_PID. $1 is the ticket number. Stop it with: kill "$FAKE_PID".
+fake_live_ticket() {
+  mkdir -p "$HEAVY_RUN_DIR/queue"
+  perl -e 'use Fcntl ":flock"; open(F, ">>", "$ARGV[0]-$$") or die; flock(F, LOCK_EX) or die; print F "pid=$$ cwd=/x cmd=fake\n"; close STDOUT; sleep 30' "$HEAVY_RUN_DIR/queue/$1" &
+  FAKE_PID=$!
+  sleep 0.5
+}
+
+@test "heavy-run: three waiters run in arrival order behind a holder" {
+  log="$BATS_TEST_TMPDIR/fifo"
+  "$SCRIPT" sleep 2 &
+  wait_held
+  for n in A B C; do
+    "$SCRIPT" sh -c "echo $n >>'$log'" &
+    wait_queued $(( $(printf '%d' "'$n") - 64 ))
+  done
+  run "$SCRIPT" --status
+  [[ "${lines[1]}" == "queue 1: "*"echo A"* ]]
+  [[ "${lines[2]}" == "queue 2: "*"echo B"* ]]
+  [[ "${lines[3]}" == "queue 3: "*"echo C"* ]]
+  wait
+  run cat "$log"
+  [ "${lines[0]}" = "A" ]
+  [ "${lines[1]}" = "B" ]
+  [ "${lines[2]}" = "C" ]
+}
+
+@test "heavy-run: a dead waiter's ticket does not block the queue and is removed" {
+  mkdir -p "$HEAVY_RUN_DIR/queue"
+  sh -c 'exit 0' & dead=$!
+  wait "$dead"
+  echo "pid=$dead cwd=/x cmd=ghost" >"$HEAVY_RUN_DIR/queue/0000000000-$dead"
+  run timeout 10 "$SCRIPT" echo ran
+  [ "$status" -eq 0 ]
+  [ "$output" = "ran" ]
+  [ ! -e "$HEAVY_RUN_DIR/queue/0000000000-$dead" ]
+}
+
+@test "heavy-run: --status lists the queue in order" {
+  "$SCRIPT" sleep 2 &
+  wait_held
+  "$SCRIPT" sh -c "echo first" &
+  wait_queued 1
+  "$SCRIPT" sh -c "echo second" &
+  wait_queued 2
+  run "$SCRIPT" --status
+  [[ "${lines[0]}" == held:* ]]
+  [[ "${lines[1]}" == "queue 1: "*"echo first"* ]]
+  [[ "${lines[2]}" == "queue 2: "*"echo second"* ]]
+  wait
+}
+
+@test "heavy-run: a waiter stopped by SIGTERM removes its own ticket" {
+  "$SCRIPT" sleep 2 &
+  wait_held
+  "$SCRIPT" true &
+  pid=$!
+  wait_queued 1
+  kill -TERM "$pid"
+  rc=0; wait "$pid" || rc=$?
+  [ "$rc" -eq 143 ]
+  [ -z "$(ls "$HEAVY_RUN_DIR/queue")" ]
+  wait
+}
+
+@test "heavy-run: a waiter stopped by SIGINT exits 130 and by SIGHUP exits 129" {
+  "$SCRIPT" sleep 3 &
+  wait_held
+  "$SCRIPT" true & pid=$!
+  wait_queued 1
+  kill -INT "$pid"
+  rc=0; wait "$pid" || rc=$?
+  [ "$rc" -eq 130 ]
+  "$SCRIPT" true & pid=$!
+  wait_queued 1
+  kill -HUP "$pid"
+  rc=0; wait "$pid" || rc=$?
+  [ "$rc" -eq 129 ]
+  wait
+}
+
+@test "heavy-run: each run appends a waited=<seconds> line to the wait log" {
+  "$SCRIPT" true
+  "$SCRIPT" true
+  run cat "$HEAVY_RUN_DIR/waits.log"
+  [ "${#lines[@]}" -eq 2 ]
+  [[ "${lines[0]}" =~ waited=[0-9]+ ]]
+}
+
+@test "heavy-run: HEAVY_RUN_WAIT_LOG moves the wait log" {
+  HEAVY_RUN_WAIT_LOG="$BATS_TEST_TMPDIR/w.log" "$SCRIPT" true
+  grep -q 'waited=' "$BATS_TEST_TMPDIR/w.log"
+  [ ! -e "$HEAVY_RUN_DIR/waits.log" ]
+}
+
+@test "heavy-run: a ticket of a reused or foreign pid does not block the queue" {
+  mkdir -p "$HEAVY_RUN_DIR/queue"
+  echo "pid=1 cwd=/x cmd=ghost" >"$HEAVY_RUN_DIR/queue/0000000000-1"
+  run timeout 10 "$SCRIPT" echo ran
+  [ "$status" -eq 0 ]
+  [ "$output" = "ran" ]
+  [ ! -e "$HEAVY_RUN_DIR/queue/0000000000-1" ]
+}
+
+@test "heavy-run: a SIGKILLed waiter does not block the queue" {
+  "$SCRIPT" sleep 2 &
+  wait_held
+  "$SCRIPT" echo victim &
+  victim=$!
+  wait_queued 1
+  kill -KILL "$victim"
+  wait "$victim" 2>/dev/null || true
+  run timeout 15 "$SCRIPT" echo after
+  [ "$status" -eq 0 ]
+  [ "$output" = "after" ]
+  [ -z "$(ls "$HEAVY_RUN_DIR/queue")" ]
+  wait
+}
+
+@test "heavy-run: a live queue behind a free lock does not make a stale HEAVY_RUN_HELD skip the lock" {
+  fake_live_ticket 9999999999
+  HEAVY_RUN_HELD="$HEAVY_RUN_DIR/lock" run "$SCRIPT" sh -c "'$SCRIPT' --status"
+  kill "$FAKE_PID"
+  [[ "${lines[0]}" == held:* ]]
+}
+
+@test "heavy-run: --status skips a ticket nobody holds" {
+  mkdir -p "$HEAVY_RUN_DIR/queue"
+  echo "pid=1 cwd=/x cmd=ghost" >"$HEAVY_RUN_DIR/queue/0000000000-1"
+  run "$SCRIPT" --status
+  [ "$output" = "free" ]
+}
+
+@test "heavy-run: an unusable queue folder warns once and falls back to the plain lock" {
+  mkdir -p "$HEAVY_RUN_DIR"
+  : >"$HEAVY_RUN_DIR/queue"
+  run --separate-stderr "$SCRIPT" echo ran
+  [ "$status" -eq 0 ]
+  [ "$output" = "ran" ]
+  [[ "$stderr" == *"heavy-run: queue unavailable"* ]]
+}
+
+@test "heavy-run: a wait log folder that cannot be made does not stop the command" {
+  : >"$BATS_TEST_TMPDIR/afile"
+  HEAVY_RUN_WAIT_LOG="$BATS_TEST_TMPDIR/afile/sub/waits.log" run "$SCRIPT" echo ran
+  [ "$status" -eq 0 ]
+  [ "$output" = "ran" ]
+}
+
+@test "heavy-run: an emptied seq file cannot jump the queue" {
+  fake_live_ticket 0000000005
+  : >"$HEAVY_RUN_DIR/seq"
+  marker="$BATS_TEST_TMPDIR/ran"
+  "$SCRIPT" sh -c "echo x >'$marker'" &
+  waiter=$!
+  sleep 1.5
+  [ ! -e "$marker" ]
+  kill "$FAKE_PID"
+  wait "$waiter"
+  [ -e "$marker" ]
+}
+
+@test "heavy-run: the sweep removes a stale temp ticket nobody holds" {
+  mkdir -p "$HEAVY_RUN_DIR/queue"
+  echo "pid=1" >"$HEAVY_RUN_DIR/queue/.new-424242"
+  touch -t 202001010000 "$HEAVY_RUN_DIR/queue/.new-424242"
+  "$SCRIPT" true
+  [ -z "$(ls -A "$HEAVY_RUN_DIR/queue")" ]
+}
