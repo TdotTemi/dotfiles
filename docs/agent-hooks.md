@@ -56,7 +56,27 @@ merged:
    stable patch-id), which is the squash-merge case.
 
 Order of proofs: the cheap local ones (ancestor, patch-id) run first; `gh` is
-asked only for branches they do not prove.
+asked only for branches they do not prove. The default branch's last 200 patch
+fingerprints are computed once per hook run, however many branches are named.
+`gh`'s answer is saved first and then searched, so a long answer (over 64 KB)
+still proves a merged PR.
+
+The hook reads the command as words, not as literal text. A `git` call counts
+as a force-delete when its subcommand is `branch` and the flags mean delete
+without a merge check: `-D`, `-d` with `-f`, `--delete` with `--force`, glued
+letters such as `-fd` or `-Dr`, in any order, before or after the branch name.
+Global options before the subcommand are understood: `-C <dir>` and
+`--git-dir[=]<dir>` move the proof into that repo. `-c`, `--work-tree` and any
+other global option block. Only plain delete flags are allowed: a glued extra
+letter such as `-Dr` blocks, because `-r` would delete remote-tracking refs.
+Git reads any unambiguous prefix of a long option, so `--del` and `--forc` count
+as `--delete` and `--force`: any prefix of `delete` (`--d`, `--de`), and 4 letters
+or more for `force` (`--fo` and `--for` clash with `--format`). Before matching, the hook drops
+quotes and backslashes and strips the path from the `git` word, so `'git'`,
+`g''it`, `\git`, `/usr/bin/git`, `git 'branch'` and `-d '-f'` are all seen as a
+force-delete; the strict parser then rejects every such form, so they block. An
+in-command alias (`git -c alias.b=branch b -D x`, `--config-env`) counts as a
+force-delete too and blocks.
 
 Each branch word must match `^[A-Za-z0-9._/-]+$` and not start with `-`. Braces,
 quotes, `$`, globs, `@{}`, `^`, `~` and the like block. The branch must exist as
@@ -76,15 +96,23 @@ stop `gh`). A non-repo folder blocks.
 Known gaps (the same as before this change; none is newly allowed):
 - The hook matches the flag text anywhere in the command line, so a heredoc or
   file body that only mentions it is blocked.
-- Only the exact text `git branch -D` is matched. These spellings never reach
-  the merged check: `git branch -d -f x`, `--delete --force`, `-fd`,
-  `git branch x -D`, a double space, and `git -C <dir> branch -D x`. Tracked as
-  `block-dangerous-git-dash-c-bypass` in `TASKS.md`.
 - A command before the delete (`git checkout main && git branch -D x`) is
   blocked, because a `cd` could change the repo the proof must check. Run the
   delete as its own command.
-- `git update-ref refs/remotes/origin/main <local branch>` forges the default
-  ref itself. The hook cannot detect that offline.
+- Forged default ref: `git update-ref refs/remotes/origin/main <local branch>`
+  forges the default ref itself, and `git symbolic-ref refs/remotes/origin/HEAD
+  refs/remotes/origin/<x>` points it at a forged `refs/remotes/origin/<x>`. The
+  hook cannot detect either offline.
+- A shell alias, function or wrapper that runs `git branch` under another name
+  never shows the word `git` to the hook.
+- Spellings the shell rewrites before git runs are not seen as words: ANSI-C
+  quoting (`$'git'`, `$'-D'`), command substitution (`` `echo git` ``,
+  `$(echo git)`), globs in the git path (`/usr/bin/gi?`), and parameter
+  defaults as flags (`${x:--D}`). Tracked in the same task as below.
+- Other commands that delete or overwrite a branch are not checked at all:
+  `git update-ref -d refs/heads/<b>`, `git push . :<b>`, `git branch -M <x> <b>`,
+  and `git branch -f <b> <x>` over an unmerged branch. Tracked as
+  `git-ref-delete-other-commands` in `TASKS.md`.
 
 Tests: `tests/agent-hooks-block-dangerous-git.bats`,
 `tests/agent-hooks-block-dangerous-git-merged.bats`.
