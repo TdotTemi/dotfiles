@@ -15,7 +15,7 @@ them. -->
 - [ ] Install and keep the Codex CLI across Node upgrades
   - **ID**: codex-cli-install
   - **Tags**: codex, node, local-bin
-  - **Details**: On 2026-10-30 `codex` was missing on this Mac: `npm ls -g` showed a stale `@openai/codex@0.156.1` but no binary, after the Node 24.21 move. Fixed by hand (`npm i -g @openai/codex` → 0.166.0, plus `ln -sf <fnm v24.21.0>/bin/codex ~/.local/bin/codex`). dotfiles has no install path for it, yet `home/zshrc.ai-tools:158` aliases `tcdx='agent-tmux codex'`. Add codex to the managed npm globals and the `~/.local/bin` link step of the Node upgrade checklist, so GUI apps and LaunchAgents find it too.
+  - **Details**: On 2026-10-30 `codex` was missing on this Mac: `npm ls -g` showed a stale `@openai/codex@0.156.1` but no binary, after the Node 24.21 move. Fixed by hand (`npm i -g @openai/codex` → 0.166.0, plus `ln -sf <fnm v24.21.0>/bin/codex ~/.local/bin/codex`). dotfiles has no install path for it, yet `home/zshrc.ai-tools:158` aliases `tcdx='agent-tmux codex'`. Add codex to the managed npm globals and the `~/.local/bin` link step of the Node upgrade checklist, so GUI apps and LaunchAgents find it too. Update 2026-10-30: the standalone Codex app is gone (merged into ChatGPT.app on 2026-07-09; `brew info --cask codex-app` says discontinued, replacement `chatgpt`). The GUI is ChatGPT.app's Codex mode; install it with `brew install --cask chatgpt`, never `codex-app`. Keep the npm CLI for the terminal: ChatGPT.app 26.928 bundles `codex-cli` 0.159.2 while npm has 0.166.0, so do not link ~/.local/bin/codex to the bundled one.
   - **Files**: `home/zshrc.ai-tools`, Node upgrade/global-package scripts, `modules/local-bin/`
   - **Output**: code
   - **Acceptance**: a fresh `fnm install` + `chezmoi apply` leaves `~/.local/bin/codex` working; `env -i HOME=$HOME PATH=/usr/bin:/bin zsh -lic 'codex --version'` exits 0.
@@ -28,7 +28,7 @@ them. -->
 - [ ] Add a Codex doctor module
   - **ID**: codex-doctor
   - **Tags**: codex, doctor
-  - **Details**: `modules/` has `claude/` and `agent-browser/` doctors but none for Codex; the only Codex check is a context7 MCP grep in `modules/claude/doctor.sh:151-152`. Add `modules/codex/doctor.sh`: binary on PATH and in `~/.local/bin`, version, `codex login status`, `~/.codex/config.toml` parses, and `~/.codex/hooks.json` is writable (CHANGELOG: read-only hooks.json skip, #16).
+  - **Details**: `modules/` has `claude/` and `agent-browser/` doctors but none for Codex; the only Codex check is a context7 MCP grep in `modules/claude/doctor.sh:151-152`. Add `modules/codex/doctor.sh`: binary on PATH and in `~/.local/bin`, version, `codex login status`, `~/.codex/config.toml` parses, and `~/.codex/hooks.json` is writable (CHANGELOG: read-only hooks.json skip, #16). Also check that ChatGPT.app (the Codex GUI host) is installed, and flag `CODEX_CLI_PATH` in ~/.codex/config.toml when it points at a missing file (on 2026-10-30 it named `/Applications/ChatGPT.app/Contents/Resources/codex`, which no longer exists; the bundled CLI is now `Resources/codex-cli/bin/codex`).
   - **Files**: `modules/codex/doctor.sh`, `modules/codex/severity`, tests
   - **Output**: code
   - **Acceptance**: `dotfiles doctor` shows codex lines; a bats test fails when the binary is absent.
