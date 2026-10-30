@@ -12,6 +12,45 @@ them. -->
 
 ## P1
 
+- [ ] Install and keep the Codex CLI across Node upgrades
+  - **ID**: codex-cli-install
+  - **Tags**: codex, node, local-bin
+  - **Details**: On 2026-10-30 `codex` was missing on this Mac: `npm ls -g` showed a stale `@openai/codex@0.156.1` but no binary, after the Node 24.21 move. Fixed by hand (`npm i -g @openai/codex` → 0.166.0, plus `ln -sf <fnm v24.21.0>/bin/codex ~/.local/bin/codex`). dotfiles has no install path for it, yet `home/zshrc.ai-tools:158` aliases `tcdx='agent-tmux codex'`. Add codex to the managed npm globals and the `~/.local/bin` link step of the Node upgrade checklist, so GUI apps and LaunchAgents find it too.
+  - **Files**: `home/zshrc.ai-tools`, Node upgrade/global-package scripts, `modules/local-bin/`
+  - **Output**: code
+  - **Acceptance**: a fresh `fnm install` + `chezmoi apply` leaves `~/.local/bin/codex` working; `env -i HOME=$HOME PATH=/usr/bin:/bin zsh -lic 'codex --version'` exits 0.
+  - **Hypothesis**: codex survives a Node upgrade; missing-codex incidents per upgrade go from 1 to 0.
+  - **Measurement**: `env -i HOME=$HOME PATH=/usr/bin:/bin zsh -lic 'codex --version'` after the next Node upgrade; bats test for the link step.
+  - **Success**: exit 0 after the upgrade, test green.
+  - **Pivot**: if npm globals keep breaking on upgrades, install codex with `brew install codex` instead.
+  - **Anchor**: Forsgren, Humble, Kim 2018 (change failure rate).
+
+- [ ] Add a Codex doctor module
+  - **ID**: codex-doctor
+  - **Tags**: codex, doctor
+  - **Details**: `modules/` has `claude/` and `agent-browser/` doctors but none for Codex; the only Codex check is a context7 MCP grep in `modules/claude/doctor.sh:151-152`. Add `modules/codex/doctor.sh`: binary on PATH and in `~/.local/bin`, version, `codex login status`, `~/.codex/config.toml` parses, and `~/.codex/hooks.json` is writable (CHANGELOG: read-only hooks.json skip, #16).
+  - **Files**: `modules/codex/doctor.sh`, `modules/codex/severity`, tests
+  - **Output**: code
+  - **Acceptance**: `dotfiles doctor` shows codex lines; a bats test fails when the binary is absent.
+  - **Hypothesis**: a broken Codex install is caught by the doctor on the same day instead of by chance.
+  - **Measurement**: `bats tests/codex-doctor.bats`; `dotfiles doctor` with `PATH=/usr/bin:/bin`.
+  - **Success**: missing binary reported as a failing line; test green.
+  - **Pivot**: if the doctor is too slow (>500 ms), skip `codex login status` unless `--full`.
+  - **Anchor**: Basili, Caldiera & Rombach 1994 (GQM).
+
+- [ ] Codex in update-tooling and tooling-checkup
+  - **ID**: codex-tooling-upkeep
+  - **Tags**: codex, skills
+  - **Details**: `skills/update-tooling` and `skills/tooling-checkup` upgrade and check Claude Code but not Codex, so Codex drifts (0.156 stale entry found 2026-10-30). Add a Codex upgrade step (`npm i -g @openai/codex@latest`, re-link) and a checkup line (version, login).
+  - **Files**: `skills/update-tooling/`, `skills/tooling-checkup/`
+  - **Output**: docs + code
+  - **Acceptance**: a checkup run prints the Codex version and login state; update-tooling upgrades it.
+  - **Hypothesis**: Codex version lag behind latest goes from unknown to 0 after each update-tooling run.
+  - **Measurement**: `codex --version` vs `npm view @openai/codex version` after update-tooling.
+  - **Success**: versions match.
+  - **Pivot**: if upgrades break the ChatGPT app's bundled Codex, pin instead of upgrading.
+  - **Anchor**: Forsgren, Humble, Kim 2018.
+
 - [ ] Headless browser test runs bypass the heavy-run lock
   - **ID**: headless-browser-runs-bypass-heavy-run
   - **Blocked**: needs-time — 2026-10-28: shipped the hook extension (e2e/ui scripts, exec playwright, make e2e/test-all) and the doctor check `resilience.headless_chrome_under_heavy_run`; Acceptance part 1 is met. Part 2 needs data: read the unexplained-overload count in the tooling-checkup machine-metrics phase on the next two checkups after this lands, then close (under 40 rows, peak load1 under 100) or pivot (over 150 rows).
