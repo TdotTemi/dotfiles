@@ -37,7 +37,7 @@ Run just these: `dotfiles doctor --module git --module macos --module ssh --modu
 | `check_managed id src dst` | Verifies chezmoi manages the file | `chezmoi apply` on the target |
 | `check_defaults id desc domain key expected type` | Verifies macOS `defaults` value | `defaults write` with the expected value |
 
-`fix_cmd` runs in a new process (`bash -c`), so a fix that calls a function defined in its module needs `export -f <function>` (and `export` for the variables it reads). `tests/doctor-fix-functions-exported.bats` fails when one is missing.
+`fix_cmd` runs in a new process (`bash -c`), so a fix that calls a function defined in its module needs `export -f <function>` (and `export` for the variables it reads; the doctor exports `DOTFILES_DIR`). `tests/doctor-fix-functions-exported.bats` fails when one is missing.
 
 Modules are sorted by severity: **critical** → **important** → **performance** → **cosmetic**.
 
