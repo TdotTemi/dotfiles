@@ -27,7 +27,10 @@ _LL_MODEL_REPO="${LOCAL_LLM_MODEL_REPO:-Qwen/Qwen3-Coder-30B-A3B-Instruct-MLX-4b
 # renders empty, so every check below would only warn about tools the
 # person chose not to install. Skip the module once instead.
 # Unset means on (strict), matching a standalone run without chezmoi data.
-if [ "${USE_LOCAL_AI:-true}" = "false" ]; then
+# --list and check-ID collection (--skip, --validate-overrides) still walk
+# the checks below, so these IDs stay known; `skipped` is not defined there.
+if [ "${USE_LOCAL_AI:-true}" = "false" ] && [ "${LIST_MODE:-false}" != true ] \
+  && declare -F skipped >/dev/null; then
   skipped "local-llm checks (use_local_ai is off)"
   return 0 2>/dev/null || exit 0
 fi
